@@ -61,11 +61,16 @@ Blockchain chỉ chạy khi cửa sổ Hardhat còn mở. Đây là mạng thử
 
 ## VNPay sandbox
 
-VNPay có sandbox để mô phỏng giao dịch. Để máy chủ tạo URL thanh toán có chữ ký, cần `TmnCode` và `HashSecret` do VNPay cấp; điền hai giá trị này vào `.env`. Khi chưa có, khách vẫn có thể đặt bằng COD. Thông tin đăng ký và luồng thanh toán nằm trong [tài liệu sandbox chính thức](https://sandbox.vnpayment.vn/apis/docs/gioi-thieu/) và [tài liệu thanh toán](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html).
+VNPay có sandbox để mô phỏng giao dịch; đây là thanh toán thử, không trừ tiền thật. Để bật phương thức này:
+
+1. Đăng ký merchant test tại [trang đăng ký Sandbox](https://sandbox.vnpayment.vn/devreg/). VNPay gửi thông tin kết nối `TmnCode` và `HashSecret` tới email đăng ký.
+2. Mở `.env` ở thư mục gốc dự án, điền hai giá trị vào `VNPAY_TMN_CODE=` và `VNPAY_HASH_SECRET=`. Không đưa `.env` lên GitHub.
+3. Khởi động lại máy chủ web. Mở <http://127.0.0.1:3000/api/health>; `vnpaySandboxConfigured` cần là `true`. Nếu chưa có thông tin merchant, khách vẫn đặt đơn bằng COD.
+4. Khi VNPay Sandbox hiển thị trang thẻ, dùng thẻ test NCB trong [hướng dẫn chính thức](https://sandbox.vnpayment.vn/apis/docs/gioi-thieu/).
+
+Tài liệu tích hợp thanh toán: [VNPay Pay API](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html). Trang trả kết quả thanh toán có thể trở lại `127.0.0.1` trên cùng máy. IPN server-to-server từ VNPay không truy cập được localhost; muốn trình diễn IPN cần một URL HTTPS công khai/tunnel và đăng ký endpoint `/api/payments/vnpay/ipn` trong cấu hình merchant VNPay.
 
 Thông số bốn sản phẩm mẫu được đối chiếu từ các trang Xiaomi: [Watch S4](https://www.mi.com/ae-en/product/xiaomi-watch-s4/specs/), [Watch 2](https://www.mi.com/global/product/xiaomi-watch-2/), [Redmi Watch 5](https://www.mi.com/ph/product/redmi-watch-5/specs/) và [Smart Band 9 Pro](https://www.mi.com/uk/product/xiaomi-smart-band-9-pro/specs/). Thời lượng pin là mức công bố theo điều kiện thử nghiệm của hãng.
-
-Trang trả kết quả thanh toán có thể trở lại `127.0.0.1` trên cùng máy. IPN server-to-server từ VNPay không truy cập được localhost; muốn trình diễn IPN cần một URL HTTPS công khai/tunnel và đăng ký endpoint `/api/payments/vnpay/ipn` trong cấu hình merchant VNPay.
 
 ## GitHub
 
