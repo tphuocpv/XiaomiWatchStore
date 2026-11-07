@@ -102,11 +102,11 @@ function parseVnpayRequest(request) {
 async function applyVnpayResult(search) {
   const orderCode = cleanText(search.get("vnp_TxnRef"), 32);
   const [rows] = await pool.execute(
-    "SELECT id, total_vnd AS totalVnd, payment_status AS paymentStatus, order_status AS orderStatus FROM orders WHERE order_code = ? LIMIT 1",
+    "SELECT id, total_vnd AS totalVnd, payment_method AS paymentMethod FROM orders WHERE order_code = ? LIMIT 1",
     [orderCode],
   );
   const order = rows[0];
-  if (!order) return { found: false };
+  if (!order || order.paymentMethod !== "vnpay") return { found: false };
   if (Number(search.get("vnp_Amount")) !== Number(order.totalVnd) * 100) return { found: true, invalidAmount: true };
 
   const success = search.get("vnp_ResponseCode") === "00" && search.get("vnp_TransactionStatus") === "00";
@@ -118,30 +118,34 @@ async function applyVnpayResult(search) {
     );
     const status = lockedRows[0]?.paymentStatus;
     if (status === "paid") {
-      await connection.execute(
-        "UPDATE payment_attempts SET response_code = ?, secure_hash_valid = TRUE WHERE transaction_ref = ?",
-        [search.get("vnp_ResponseCode"), orderCode],
-      );
+      if (success) {
+        await connection.execute(
+          "UPDATE payment_attempts SET response_code = '00', secure_hash_valid = TRUE WHERE transaction_ref = ?",
+          [orderCode],
+        );
+      }
       await connection.commit();
       return { found: true, alreadyPaid: true, success: true };
     }
-    if (status !== "failed" && status !== "refunded") {
-      if (success) {
-        await connection.execute(
-          "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE id = ?", [order.id],
+    if (status === "failed" || status === "refunded") {
+      await connection.commit();
+      return { found: true, success: false, terminal: true };
+    }
+    if (success) {
+      await connection.execute(
+        "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE id = ?", [order.id],
+      );
+    } else {
+      await connection.execute(
+        "UPDATE orders SET payment_status = 'failed', order_status = 'cancelled' WHERE id = ?", [order.id],
+      );
+      if (lockedRows[0]?.orderStatus !== "cancelled") {
+        const [items] = await connection.execute(
+          "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [order.id],
         );
-      } else {
-        await connection.execute(
-          "UPDATE orders SET payment_status = 'failed', order_status = 'cancelled' WHERE id = ?", [order.id],
-        );
-        if (lockedRows[0]?.orderStatus !== "cancelled") {
-          const [items] = await connection.execute(
-            "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [order.id],
-          );
-          for (const item of items) {
-            if (item.productId != null) {
-              await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
-            }
+        for (const item of items) {
+          if (item.productId != null) {
+            await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
           }
         }
       }
@@ -432,6 +436,11 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
       if (!orderTransitions[order.orderStatus]?.has(orderStatus)) {
         await connection.rollback();
         return response.status(409).json({ error: "Không thể chuyển đơn theo thứ tự này. Hãy xử lý trạng thái hiện tại trước." });
+      }
+      if (order.paymentMethod === "vnpay" && order.paymentStatus !== "paid"
+          && ["confirmed", "packing", "shipped", "delivered"].includes(orderStatus)) {
+        await connection.rollback();
+        return response.status(409).json({ error: "Chưa thể xử lý đơn VNPay khi thanh toán chưa được xác nhận." });
       }
       if (orderStatus === "cancelled" && order.orderStatus !== "cancelled") {
         if (order.paymentStatus === "paid") {

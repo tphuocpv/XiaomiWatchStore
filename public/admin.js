@@ -90,7 +90,14 @@ function renderOrder(order) {
   controls.className = "order-controls";
   const status = document.createElement("select");
   status.setAttribute("aria-label", `Trạng thái đơn ${order.orderCode}`);
-  for (const [code, label] of orderStates) selectOption(status, code, label);
+  const vnpayUnpaid = order.paymentMethod === "vnpay" && order.paymentStatus !== "paid";
+  for (const [code, label] of orderStates) {
+    selectOption(status, code, label);
+    if (vnpayUnpaid && ["confirmed", "packing", "shipped", "delivered"].includes(code)) {
+      status.lastElementChild.disabled = true;
+    }
+  }
+  if (vnpayUnpaid) status.title = "Chờ VNPay xác nhận thanh toán trước khi xử lý đơn.";
   status.value = order.orderStatus;
   const saveStatus = document.createElement("button");
   saveStatus.type = "button";
