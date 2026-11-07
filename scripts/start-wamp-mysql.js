@@ -63,6 +63,7 @@ try {
   const child = spawn(server, [
     `--defaults-file=${optionsFile}`,
     "--defaults-group-suffix=wampmysqld64",
+    "--bind-address=127.0.0.1",
     "--console",
   ], {
     detached: true,
