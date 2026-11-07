@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101316">
+    <meta name="description" content="Cửa hàng đồng hồ thông minh Xiaomi và Redmi.">
+    <title>MiTime — Đồng hồ thông minh Xiaomi</title>
+    <link rel="stylesheet" href="/app.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="announcement">MiTime Store <span>·</span> Thiết bị thông minh cho nhịp sống của bạn</div>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="MiTime trang chủ"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
+      <nav class="desktop-nav" aria-label="Điều hướng chính">
+        <a href="#products">Đồng hồ</a>
+        <a href="#products" data-category-link="dong-ho-xiaomi">Xiaomi Watch</a>
+        <a href="#products" data-category-link="dong-ho-redmi">Redmi Watch</a>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-button" id="account-button" type="button" aria-label="Tài khoản">♙ <span id="account-label">Đăng nhập</span></button>
+        <button class="cart-button" id="cart-open" type="button" aria-label="Mở giỏ hàng">Giỏ hàng <span class="cart-count" id="cart-count">0</span></button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> XIAOMI WATCH COLLECTION</p>
+          <h1>Thời gian của bạn.<br><em>Phong cách của bạn.</em></h1>
+          <p class="hero-description">Khám phá đồng hồ thông minh Xiaomi và Redmi — kết nối với sức khỏe, vận động và mọi khoảnh khắc mỗi ngày.</p>
+          <a class="primary-button" href="#products">Khám phá sản phẩm <span aria-hidden="true">↗</span></a>
+          <div class="hero-note"><span class="note-line"></span> Dữ liệu giá và sản phẩm đang ở chế độ minh họa</div>
+        </div>
+        <div class="hero-art" aria-label="Đồng hồ thông minh Xiaomi" role="img">
+          <div class="art-orbit orbit-one"></div>
+          <div class="art-orbit orbit-two"></div>
+          <div class="art-glow"></div>
+          <img src="/assets/watch-placeholder.svg" alt="">
+          <div class="art-tag"><span class="tag-dot"></span> SMART, EVERY DAY</div>
+          <div class="art-index">01 / 04</div>
+        </div>
+        <div class="hero-bottom"><span>MI WATCH / REDMI WATCH</span><span>01 — 2026</span></div>
+      </section>
+
+      <section class="benefits" aria-label="Thông tin cửa hàng">
+        <div><span class="benefit-icon">◇</span><p><strong>Chọn hàng dễ dàng</strong><small>Lọc theo dòng sản phẩm</small></p></div>
+        <div><span class="benefit-icon">⌂</span><p><strong>Giao hàng tận nơi</strong><small>Nhập địa chỉ khi đặt hàng</small></p></div>
+        <div><span class="benefit-icon">↗</span><p><strong>Đơn hàng minh bạch</strong><small>Có thể đối chiếu mã blockchain</small></p></div>
+      </section>
+
+      <section class="products-section" id="products">
+        <div class="section-heading">
+          <div><p class="eyebrow">CHỌN THEO NHỊP SỐNG</p><h2>Đồng hồ nổi bật<span>.</span></h2></div>
+          <p class="section-aside">Thiết kế thông minh, sẵn sàng<br>đồng hành cùng bạn mỗi ngày.</p>
+        </div>
+        <div class="catalog-controls">
+          <div class="category-list" id="category-list" aria-label="Lọc danh mục"></div>
+          <div class="search-sort">
+            <label class="search-box"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="Tìm đồng hồ..." autocomplete="off"></label>
+            <select id="sort-select" aria-label="Sắp xếp sản phẩm">
+              <option value="featured">Nổi bật</option>
+              <option value="price-asc">Giá tăng dần</option>
+              <option value="price-desc">Giá giảm dần</option>
+            </select>
+          </div>
+        </div>
+        <p class="service-notice" id="service-notice" role="status" hidden></p>
+        <div class="product-grid" id="product-grid" aria-live="polite"></div>
+        <div class="empty-state" id="empty-products" hidden>Không tìm thấy mẫu phù hợp. Thử đổi từ khóa hoặc danh mục nhé.</div>
+      </section>
+
+      <section class="story-banner">
+        <div><p class="eyebrow">MI WATCH / YOUR EVERYDAY</p><h2>Chạm vào nhịp<br>điệu của riêng bạn.</h2><p>Giao diện cửa hàng được thiết kế cho trải nghiệm mua sắm gọn gàng và dễ sử dụng.</p><a href="#products" class="text-link">Xem bộ sưu tập <span>→</span></a></div>
+        <div class="story-mark" aria-hidden="true"><span>MI</span><i>TIME</i></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
+      <p>Đồ án thương mại điện tử · Dữ liệu hiện tại là minh họa</p>
+      <a href="/admin.html">Khu vực quản trị <span>↗</span></a>
+    </footer>
+
+    <div class="scrim" id="scrim" hidden></div>
+    <aside class="cart-drawer" id="cart-drawer" aria-label="Giỏ hàng" aria-hidden="true">
+      <div class="drawer-heading"><div><p class="eyebrow">GIỎ HÀNG CỦA BẠN</p><h2>Đã chọn <span id="drawer-count">0</span> món</h2></div><button class="close-button" id="cart-close" type="button" aria-label="Đóng giỏ hàng">×</button></div>
+      <div class="cart-items" id="cart-items"></div>
+      <div class="cart-empty" id="cart-empty">Giỏ hàng đang trống. Hãy chọn chiếc đồng hồ bạn thích.</div>
+      <div class="drawer-footer"><div class="subtotal"><span>Tạm tính</span><strong id="cart-total">0 ₫</strong></div><button class="primary-button checkout-button" id="checkout-open" type="button">Tiến hành đặt hàng <span>→</span></button><p>Thông tin giá là dữ liệu minh họa cho đồ án.</p></div>
+    </aside>
+
+    <section class="dialog" id="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title" hidden>
+      <div class="dialog-card"><button class="close-button dialog-close" type="button" aria-label="Đóng">×</button><p class="eyebrow">CHÀO MỪNG ĐẾN MITIME</p><h2 id="account-title">Tài khoản của bạn</h2>
+        <div class="dialog-tabs"><button type="button" class="tab-button active" data-auth-tab="login">Đăng nhập</button><button type="button" class="tab-button" data-auth-tab="register">Tạo tài khoản</button></div>
+        <form id="login-form" class="form-stack">
+          <label>Tên đăng nhập hoặc email<input name="username" required autocomplete="username"></label>
+          <label>Mật khẩu<input name="password" type="password" required autocomplete="current-password"></label>
+          <button class="primary-button" type="submit">Đăng nhập <span>→</span></button>
+        </form>
+        <form id="register-form" class="form-stack" hidden>
+          <label>Họ và tên<input name="fullName" required maxlength="120" autocomplete="name"></label>
+          <label>Số điện thoại<input name="phone" required maxlength="24" autocomplete="tel"></label>
+          <label>Email<input name="email" type="email" required maxlength="190" autocomplete="email"></label>
+          <label>Tên đăng nhập<input name="username" required minlength="4" maxlength="64" autocomplete="username"></label>
+          <label>Địa chỉ<input name="address" required maxlength="500" autocomplete="street-address"></label>
+          <label>Mật khẩu<input name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+          <button class="primary-button" type="submit">Tạo tài khoản <span>→</span></button>
+        </form>
+        <section class="account-orders" id="account-orders" hidden>
+          <div class="account-orders-heading"><h3>Đơn hàng của tôi</h3><button class="text-link" id="orders-refresh" type="button">Làm mới</button></div>
+          <div id="customer-orders" class="customer-orders"></div>
+          <button class="secondary-button" id="logout-button" type="button">Đăng xuất</button>
+        </section>
+        <p class="form-message" id="account-message" role="status"></p>
+      </div>
+    </section>
+
+    <section class="dialog" id="checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-title" hidden>
+      <div class="dialog-card"><button class="close-button dialog-close" type="button" aria-label="Đóng">×</button><p class="eyebrow">THÔNG TIN GIAO HÀNG</p><h2 id="checkout-title">Hoàn tất đơn hàng</h2>
+        <form id="checkout-form" class="form-stack">
+          <label>Người nhận<input name="shippingName" required maxlength="120" autocomplete="name"></label>
+          <label>Số điện thoại<input name="shippingPhone" required maxlength="24" autocomplete="tel"></label>
+          <label>Địa chỉ nhận hàng<textarea name="shippingAddress" required maxlength="500" rows="2" autocomplete="street-address"></textarea></label>
+          <fieldset class="payment-options"><legend>Phương thức thanh toán</legend><label><input type="radio" name="paymentMethod" value="cod" checked> Thanh toán khi nhận hàng (COD)</label><label><input type="radio" name="paymentMethod" value="vnpay"> VNPay sandbox (giao dịch thử)</label></fieldset>
+          <p class="form-message" id="checkout-message" role="status"></p>
+          <button class="primary-button" type="submit">Tạo đơn hàng <span>→</span></button>
+        </form>
+      </div>
+    </section>
+  </body>
+</html>

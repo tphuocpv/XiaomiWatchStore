@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101316">
+    <title>Quản trị — MiTime</title>
+    <link rel="stylesheet" href="/app.css">
+    <link rel="stylesheet" href="/admin.css">
+    <script type="module" src="/admin.js"></script>
+  </head>
+  <body class="admin-page">
+    <div class="announcement">MITIME STORE <span>·</span> KHU VỰC QUẢN TRỊ</div>
+    <header class="site-header admin-header">
+      <a class="brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
+      <div class="admin-header-actions"><a href="/">← Trở lại cửa hàng</a><span id="admin-user">Đang kiểm tra phiên đăng nhập…</span></div>
+    </header>
+    <main class="admin-main">
+      <section class="admin-intro">
+        <div><p class="eyebrow">LOCAL STORE MANAGEMENT</p><h1>Quản trị cửa hàng<span>.</span></h1><p>Quản lý sản phẩm, đơn hàng và dấu xác thực trên blockchain local.</p></div>
+        <div class="wallet-panel"><div><strong>Ví MetaMask</strong><p id="wallet-status">Chưa kết nối ví admin.</p></div><button id="wallet-connect" class="primary-button" type="button">Kết nối MetaMask</button></div>
+      </section>
+      <p id="admin-message" class="admin-message" role="status" hidden></p>
+      <section id="admin-login-needed" class="admin-login-needed" hidden><h2>Cần đăng nhập bằng tài khoản admin</h2><p>Hãy đăng nhập ở cửa hàng bằng tài khoản quản trị để mở bảng điều khiển này.</p><a class="primary-button" href="/">Về trang cửa hàng</a></section>
+      <div id="admin-dashboard" hidden>
+        <nav class="admin-tabs" aria-label="Quản trị"><button class="active" data-panel="orders" type="button">Đơn hàng</button><button data-panel="products" type="button">Sản phẩm</button></nav>
+        <section class="admin-panel" id="orders-panel">
+          <div class="admin-section-heading"><div><p class="eyebrow">ORDER DESK</p><h2>Đơn hàng mới nhất</h2></div><button id="orders-reload" class="secondary-button" type="button">Làm mới</button></div>
+          <div id="admin-orders" class="admin-order-list"></div>
+        </section>
+        <section class="admin-panel" id="products-panel" hidden>
+          <div class="admin-section-heading"><div><p class="eyebrow">CATALOG</p><h2>Danh mục sản phẩm</h2></div><button id="products-reload" class="secondary-button" type="button">Làm mới</button></div>
+          <form id="product-form" class="product-editor">
+            <input type="hidden" name="id">
+            <h3 id="product-form-title">Thêm sản phẩm</h3>
+            <div class="admin-form-grid">
+              <label>Tên sản phẩm<input name="name" required maxlength="180" placeholder="Xiaomi Watch S4"></label>
+              <label>Danh mục<select name="categoryId" required></select></label>
+              <label>Giá bán (VND)<input name="priceVnd" type="number" min="1" step="1" required></label>
+              <label>Giá niêm yết (VND)<input name="compareAtVnd" type="number" min="1" step="1"></label>
+              <label>Tồn kho<input name="stock" type="number" min="0" step="1" required></label>
+              <label>Ảnh (đường dẫn /assets/)<input name="imageUrl" value="/assets/watch-placeholder.svg" required></label>
+              <label class="wide-field">Mô tả ngắn<input name="shortDescription" maxlength="500"></label>
+              <label class="wide-field">Thông số dạng JSON<textarea name="specifications" rows="3">{"Màn hình":"AMOLED","GPS":"Có"}</textarea></label>
+            </div>
+            <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span></div>
+          </form>
+          <div id="admin-products" class="admin-product-list"></div>
+        </section>
+      </div>
+    </main>
+    <footer class="site-footer"><a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a><p>Dữ liệu đơn hàng nằm trong MySQL cục bộ</p><span>Hardhat Local · Chain ID 31337</span></footer>
+  </body>
+</html>
