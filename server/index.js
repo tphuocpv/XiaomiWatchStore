@@ -482,10 +482,54 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
 
 app.get("/api/admin/categories", requireUser, requireAdmin, async (_request, response) => {
   try {
-    const [categories] = await pool.execute("SELECT id, name, slug FROM categories ORDER BY name");
+    const [categories] = await pool.execute("SELECT id, name, slug, description FROM categories ORDER BY name");
     response.json({ categories });
   } catch {
     response.status(503).json({ error: "Chưa đọc được danh mục." });
+  }
+});
+
+function categoryInput(body) {
+  const name = cleanText(body?.name, 100);
+  const description = cleanText(body?.description, 500);
+  const slug = productSlug(name).slice(0, 119);
+  if (!name || !slug) return { error: "Nhập tên danh mục hợp lệ." };
+  return { name, slug, description };
+}
+
+app.post("/api/admin/categories", requireUser, requireAdmin, async (request, response) => {
+  const data = categoryInput(request.body);
+  if (data.error) return response.status(400).json({ error: data.error });
+  try {
+    const [result] = await pool.execute(
+      "INSERT INTO categories (name, slug, description) VALUES (?, ?, ?)",
+      [data.name, data.slug, data.description || null],
+    );
+    response.status(201).json({ id: result.insertId });
+  } catch (error) {
+    response.status(error.code === "ER_DUP_ENTRY" ? 409 : 503).json({
+      error: error.code === "ER_DUP_ENTRY" ? "Tên hoặc đường dẫn danh mục đã tồn tại." : "Chưa lưu được danh mục.",
+    });
+  }
+});
+
+app.patch("/api/admin/categories/:id", requireUser, requireAdmin, async (request, response) => {
+  const id = Number(request.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Mã danh mục không hợp lệ." });
+  const data = categoryInput(request.body);
+  if (data.error) return response.status(400).json({ error: data.error });
+  try {
+    const [existing] = await pool.execute("SELECT id FROM categories WHERE id = ? LIMIT 1", [id]);
+    if (!existing.length) return response.status(404).json({ error: "Không tìm thấy danh mục." });
+    await pool.execute(
+      "UPDATE categories SET name = ?, slug = ?, description = ? WHERE id = ?",
+      [data.name, data.slug, data.description || null, id],
+    );
+    response.json({ ok: true });
+  } catch (error) {
+    response.status(error.code === "ER_DUP_ENTRY" ? 409 : 503).json({
+      error: error.code === "ER_DUP_ENTRY" ? "Tên hoặc đường dẫn danh mục đã tồn tại." : "Chưa cập nhật được danh mục.",
+    });
   }
 });
 

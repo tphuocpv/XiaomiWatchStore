@@ -219,6 +219,44 @@ async function loadCategories() {
   const select = $("#product-form [name=categoryId]");
   select.replaceChildren();
   for (const category of categories) selectOption(select, String(category.id), category.name);
+
+  const list = $("#admin-categories");
+  list.replaceChildren();
+  if (!categories.length) list.append(emptyNode("Chưa có danh mục."));
+  for (const category of categories) {
+    const card = document.createElement("article");
+    card.className = "admin-product-card";
+    const top = document.createElement("div");
+    top.className = "admin-product-top";
+    const info = document.createElement("div");
+    const name = document.createElement("h3");
+    name.textContent = category.name;
+    const description = document.createElement("p");
+    description.textContent = category.description || `Đường dẫn: /${category.slug}`;
+    info.append(name, description);
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.textContent = "Sửa danh mục";
+    edit.addEventListener("click", () => {
+      populateCategoryForm(category);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    const actions = document.createElement("div");
+    actions.className = "admin-product-actions";
+    actions.append(edit);
+    top.append(info, actions);
+    card.append(top);
+    list.append(card);
+  }
+}
+
+function populateCategoryForm(category) {
+  const form = $("#category-form");
+  form.elements.id.value = category?.id ?? "";
+  form.elements.name.value = category?.name ?? "";
+  form.elements.description.value = category?.description ?? "";
+  $("#category-form-title").textContent = category ? `Sửa danh mục #${category.id}` : "Thêm danh mục";
+  $("#category-message").textContent = "";
 }
 
 function populateProductForm(product) {
@@ -318,6 +356,21 @@ $("#wallet-connect").addEventListener("click", async () => {
 $("#orders-reload").addEventListener("click", loadOrders);
 $("#products-reload").addEventListener("click", loadProducts);
 $("#product-reset").addEventListener("click", () => populateProductForm(null));
+$("#category-reset").addEventListener("click", () => populateCategoryForm(null));
+$("#category-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  const body = { name: form.elements.name.value, description: form.elements.description.value };
+  try {
+    await api(id ? `/api/admin/categories/${id}` : "/api/admin/categories", {
+      method: id ? "PATCH" : "POST", body: JSON.stringify(body),
+    });
+    populateCategoryForm(null);
+    $("#category-message").textContent = id ? "Đã cập nhật danh mục." : "Đã thêm danh mục.";
+    await loadProducts();
+  } catch (error) { $("#category-message").textContent = error.message; }
+});
 $("#product-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;

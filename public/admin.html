@@ -29,7 +29,17 @@
           <div id="admin-orders" class="admin-order-list"></div>
         </section>
         <section class="admin-panel" id="products-panel" hidden>
-          <div class="admin-section-heading"><div><p class="eyebrow">CATALOG</p><h2>Danh mục sản phẩm</h2></div><button id="products-reload" class="secondary-button" type="button">Làm mới</button></div>
+          <div class="admin-section-heading"><div><p class="eyebrow">CATALOG</p><h2>Sản phẩm và danh mục</h2></div><button id="products-reload" class="secondary-button" type="button">Làm mới</button></div>
+          <form id="category-form" class="product-editor">
+            <input type="hidden" name="id">
+            <h3 id="category-form-title">Thêm danh mục</h3>
+            <div class="admin-form-grid">
+              <label>Tên danh mục<input name="name" required maxlength="100" placeholder="Đồng hồ thể thao"></label>
+              <label>Mô tả<input name="description" maxlength="500" placeholder="Các mẫu đồng hồ phục vụ luyện tập"></label>
+            </div>
+            <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu danh mục</button><button class="secondary-button" id="category-reset" type="button">Làm mới biểu mẫu</button><span id="category-message" role="status"></span></div>
+          </form>
+          <div id="admin-categories" class="admin-product-list"></div>
           <form id="product-form" class="product-editor">
             <input type="hidden" name="id">
             <h3 id="product-form-title">Thêm sản phẩm</h3>
