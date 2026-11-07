@@ -63,6 +63,8 @@ Blockchain chỉ chạy khi cửa sổ Hardhat còn mở. Đây là mạng thử
 
 VNPay có sandbox để mô phỏng giao dịch. Để máy chủ tạo URL thanh toán có chữ ký, cần `TmnCode` và `HashSecret` do VNPay cấp; điền hai giá trị này vào `.env`. Khi chưa có, khách vẫn có thể đặt bằng COD. Thông tin đăng ký và luồng thanh toán nằm trong [tài liệu sandbox chính thức](https://sandbox.vnpayment.vn/apis/docs/gioi-thieu/) và [tài liệu thanh toán](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html).
 
+Thông số bốn sản phẩm mẫu được đối chiếu từ các trang Xiaomi: [Watch S4](https://www.mi.com/ae-en/product/xiaomi-watch-s4/specs/), [Watch 2](https://www.mi.com/global/product/xiaomi-watch-2/), [Redmi Watch 5](https://www.mi.com/ph/product/redmi-watch-5/specs/) và [Smart Band 9 Pro](https://www.mi.com/uk/product/xiaomi-smart-band-9-pro/specs/). Thời lượng pin là mức công bố theo điều kiện thử nghiệm của hãng.
+
 Trang trả kết quả thanh toán có thể trở lại `127.0.0.1` trên cùng máy. IPN server-to-server từ VNPay không truy cập được localhost; muốn trình diễn IPN cần một URL HTTPS công khai/tunnel và đăng ký endpoint `/api/payments/vnpay/ipn` trong cấu hình merchant VNPay.
 
 ## GitHub
