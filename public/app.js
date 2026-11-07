@@ -455,9 +455,15 @@ document.querySelectorAll(".dialog").forEach((dialog) => {
 
 $("#checkout-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
+  if (form.dataset.submitting === "true") return;
+  const submitButton = form.querySelector('button[type="submit"]');
+  form.dataset.submitting = "true";
+  submitButton.disabled = true;
+  submitButton.setAttribute("aria-busy", "true");
   const message = $("#checkout-message");
-  message.textContent = "";
-  const formData = Object.fromEntries(new FormData(event.currentTarget).entries());
+  message.textContent = "Đang tạo đơn hàng…";
+  const formData = Object.fromEntries(new FormData(form).entries());
   if (state.user) {
     formData.shippingName ||= state.user.fullName;
     formData.shippingPhone ||= state.user.phone;
@@ -476,10 +482,15 @@ $("#checkout-form").addEventListener("submit", async (event) => {
     state.cart = [];
     saveCart();
     renderCart();
+    message.textContent = "";
     closeDialog(checkoutDialog);
     window.alert("Đã tạo đơn " + result.order.orderCode + ". Bạn có thể xem trạng thái trong tài khoản.");
   } catch (error) {
     message.textContent = error.message;
+  } finally {
+    form.dataset.submitting = "false";
+    submitButton.disabled = false;
+    submitButton.removeAttribute("aria-busy");
   }
 });
 
