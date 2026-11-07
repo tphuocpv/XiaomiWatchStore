@@ -12,19 +12,18 @@
 
 ## Chạy lần đầu trên Windows
 
-1. Mở Wampserver, chờ biểu tượng chuyển xanh. Mở phpMyAdmin và đăng nhập MySQL.
-2. Trong phpMyAdmin, chọn **Import** và nhập `database/schema.sql`, sau đó nhập `database/seed.sql`. Đây là schema mới cho dự án này; không nhập vào database LabChain.
-3. Mở PowerShell tại thư mục `XiaomiWatchStore` và chạy:
+1. Mở PowerShell tại thư mục `XiaomiWatchStore` và chạy các lệnh sau theo thứ tự:
 
    ```powershell
    .\npm-local.cmd run setup
    .\npm-local.cmd install
-   .\npm-local.cmd run db:seed
+   .\npm-local.cmd run mysql:start
+   .\npm-local.cmd run db:setup
    ```
 
-   `setup` tạo `.env` với session secret ngẫu nhiên nếu tệp chưa có. Trong thư mục làm việc hiện tại, `.env` đã được tạo sẵn. Nếu MySQL có mật khẩu hoặc chạy cổng khác, sửa các dòng `DB_*` trong `.env`.
+   `setup` tạo `.env` với session secret ngẫu nhiên nếu tệp chưa có. `mysql:start` báo nếu MySQL đã chạy; nếu chưa, nó khởi động MySQL từ Wampserver. `db:setup` tự tạo database, bảng, sản phẩm mẫu và admin; không cần nhập SQL thủ công. Nếu MySQL có mật khẩu hoặc chạy cổng khác, sửa các dòng `DB_*` trong `.env`.
 
-4. Khởi động web:
+2. Khởi động web:
 
    ```powershell
    .\npm-local.cmd run dev

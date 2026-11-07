@@ -8,11 +8,13 @@
     "dev": "node --watch server/index.js",
     "start": "node server/index.js",
     "setup": "node scripts/setup-local.js",
+    "mysql:start": "node -r dotenv/config scripts/start-wamp-mysql.js",
+    "db:setup": "node scripts/initialize-database.js",
     "chain": "hardhat node --hostname 127.0.0.1",
     "deploy:local": "hardhat build && node scripts/deploy-local.js",
     "configure:wallet": "node scripts/configure-wallet.js",
     "db:seed": "node scripts/seed-admin.js",
-    "build": "node --check server/index.js && node --check server/vnpay.js && node --check public/app.js && node --check public/admin.js && node --check scripts/setup-local.js && node --check scripts/configure-wallet.js && node --check scripts/deploy-local.js && node --check scripts/seed-admin.js"
+    "build": "node --check server/index.js && node --check server/vnpay.js && node --check public/app.js && node --check public/admin.js && node --check scripts/setup-local.js && node --check scripts/start-wamp-mysql.js && node --check scripts/initialize-database.js && node --check scripts/configure-wallet.js && node --check scripts/deploy-local.js && node --check scripts/seed-admin.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
