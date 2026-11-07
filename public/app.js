@@ -329,6 +329,24 @@ async function loadOrders() {
   }
 }
 
+async function loadPaymentOptions() {
+  const option = $("#vnpay-option");
+  const note = $("#vnpay-availability");
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    const status = await response.json();
+    const configured = status.vnpaySandboxConfigured === true;
+    option.disabled = !configured;
+    if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
+    note.textContent = configured
+      ? "Sandbox đã sẵn sàng; đây là giao dịch mô phỏng, không thu tiền thật."
+      : "VNPay sandbox sẽ bật sau khi cấu hình TmnCode và HashSecret trong .env.";
+  } catch {
+    option.disabled = true;
+    note.textContent = "Chưa kết nối được máy chủ để kiểm tra VNPay sandbox.";
+  }
+}
+
 async function submitAuth(form, endpoint) {
   const message = $("#account-message");
   message.textContent = "";
@@ -467,6 +485,7 @@ document.addEventListener("keydown", (event) => {
 
 loadProducts();
 loadUser();
+loadPaymentOptions();
 
 const paymentResult = new URLSearchParams(window.location.search).get("payment");
 if (paymentResult) {

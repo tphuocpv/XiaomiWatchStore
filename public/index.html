@@ -123,7 +123,7 @@
           <label>Người nhận<input name="shippingName" required maxlength="120" autocomplete="name"></label>
           <label>Số điện thoại<input name="shippingPhone" required maxlength="24" autocomplete="tel"></label>
           <label>Địa chỉ nhận hàng<textarea name="shippingAddress" required maxlength="500" rows="2" autocomplete="street-address"></textarea></label>
-          <fieldset class="payment-options"><legend>Phương thức thanh toán</legend><label><input type="radio" name="paymentMethod" value="cod" checked> Thanh toán khi nhận hàng (COD)</label><label><input type="radio" name="paymentMethod" value="vnpay"> VNPay sandbox (giao dịch thử)</label></fieldset>
+          <fieldset class="payment-options"><legend>Phương thức thanh toán</legend><label><input type="radio" name="paymentMethod" value="cod" checked> Thanh toán khi nhận hàng (COD)</label><label><input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay"><span>VNPay sandbox (giao dịch thử)</span></label><p class="payment-note" id="vnpay-availability" role="status"></p></fieldset>
           <p class="form-message" id="checkout-message" role="status"></p>
           <button class="primary-button" type="submit">Tạo đơn hàng <span>→</span></button>
         </form>

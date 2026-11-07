@@ -156,4 +156,6 @@ button{cursor:pointer}
 .customer-order-card small { display: block; color: #176451; overflow-wrap: anywhere; }
 .account-orders .secondary-button { padding: 9px 12px; border: 1px solid #dce4df; border-radius: 8px; background: white; cursor: pointer; }
 .product-specs { min-height: 28px; margin: 5px 0 12px; color: #64706a; font-size: 9px; line-height: 1.45; }
+.payment-note { grid-column: 1 / -1; margin: 0; color: #68716b; font-size: 10px; line-height: 1.5; }
+.payment-options input:disabled + span { color: #8a918d; }
 @media(max-width:620px){.product-specs{min-height:28px;font-size:7px;margin:4px 0 9px}}

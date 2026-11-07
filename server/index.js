@@ -165,7 +165,7 @@ app.get("/api/health", async (_request, response) => {
     await pool.query("SELECT 1");
     response.json({ status: "ok", mysql: "connected", vnpaySandboxConfigured: hasVnpayCredentials() });
   } catch {
-    response.status(503).json({ status: "needs-setup", mysql: "disconnected" });
+    response.status(503).json({ status: "needs-setup", mysql: "disconnected", vnpaySandboxConfigured: hasVnpayCredentials() });
   }
 });
 
