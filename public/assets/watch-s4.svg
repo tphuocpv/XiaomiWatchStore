@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 400" role="img" aria-labelledby="title">
+  <title id="title">Đồng hồ tròn minh họa Xiaomi Watch S4</title>
+  <defs>
+    <linearGradient id="strap" x2="1" y2="1"><stop stop-color="#75847b"/><stop offset="1" stop-color="#26352f"/></linearGradient>
+    <linearGradient id="case" x2="1" y2="1"><stop stop-color="#f1f2e8"/><stop offset=".45" stop-color="#89928b"/><stop offset="1" stop-color="#323c37"/></linearGradient>
+    <radialGradient id="screen"><stop stop-color="#203b3b"/><stop offset="1" stop-color="#090f12"/></radialGradient>
+    <filter id="shadow"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <ellipse cx="180" cy="350" rx="87" ry="16" fill="#15201a" opacity=".2" filter="url(#shadow)"/>
+  <g transform="rotate(-11 180 200)">
+    <path d="M132 27Q180 12 228 27L216 125H144Z" fill="url(#strap)"/>
+    <path d="M144 275H216L229 372Q180 388 131 372Z" fill="url(#strap)"/>
+    <path d="M153 43h54M151 61h58M149 79h62" stroke="#bdc7bd" stroke-opacity=".4" stroke-width="3" stroke-linecap="round"/>
+    <path d="M145 323h70M143 341h74M141 359h78" stroke="#bdc7bd" stroke-opacity=".3" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="180" cy="200" r="91" fill="url(#case)" stroke="#fff" stroke-opacity=".7" stroke-width="3"/>
+    <circle cx="180" cy="200" r="78" fill="#080d0f"/>
+    <circle cx="180" cy="200" r="71" fill="url(#screen)"/>
+    <circle cx="180" cy="190" r="37" fill="none" stroke="#c7f36a" stroke-width="8" stroke-dasharray="176 58" transform="rotate(-72 180 190)"/>
+    <circle cx="180" cy="190" r="25" fill="none" stroke="#75d5cf" stroke-width="3" stroke-dasharray="105 52" transform="rotate(40 180 190)"/>
+    <path d="M180 170v23l16 10" fill="none" stroke="#f4f5ef" stroke-width="3" stroke-linecap="round"/>
+    <text x="180" y="250" fill="#fff" font-family="Arial,sans-serif" font-size="14" font-weight="700" text-anchor="middle">09:41</text>
+    <rect x="266" y="181" width="12" height="38" rx="6" fill="#c8d0ca"/>
+  </g>
+</svg>
