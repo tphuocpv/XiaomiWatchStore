@@ -86,6 +86,14 @@ function renderOrder(order) {
   address.className = "admin-order-address";
   address.textContent = `Người nhận: ${order.shippingName} · ${order.shippingPhone} · ${order.shippingAddress}`;
 
+  const items = document.createElement("ul");
+  items.className = "admin-order-items";
+  for (const item of order.items ?? []) {
+    const line = document.createElement("li");
+    line.textContent = `${item.productName} · ${item.quantity} × ${currency.format(Number(item.unitPriceVnd))}`;
+    items.append(line);
+  }
+
   const controls = document.createElement("div");
   controls.className = "order-controls";
   const status = document.createElement("select");
@@ -152,7 +160,9 @@ function renderOrder(order) {
     proof.append(anchor);
   }
 
-  card.append(top, address, controls, proof);
+  card.append(top, address);
+  if (items.childElementCount) card.append(items);
+  card.append(controls, proof);
   return card;
 }
 

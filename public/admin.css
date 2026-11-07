@@ -26,6 +26,7 @@
 .admin-order-top h3, .admin-product-top h3 { margin: 0 0 8px; font-size: 18px; }
 .admin-order-top p, .admin-product-top p, .admin-order-address { color: #68716e; margin: 5px 0; font-size: 13px; }
 .admin-order-address { padding: 12px 0; border-bottom: 1px solid #e5ebe7; overflow-wrap: anywhere; }
+.admin-order-items { padding: 8px 0 8px 20px; border-bottom: 1px solid #e5ebe7; }
 .order-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 15px; }
 .order-controls select, .order-controls button, .admin-form-actions button, .admin-product-actions button { font: inherit; }
 .order-controls select { padding: 10px 12px; border: 1px solid #ccd9d1; border-radius: 8px; background: #fff; color: #15231e; }

@@ -313,6 +313,14 @@ async function loadOrders() {
       const status = document.createElement("p");
       status.textContent = `Đơn: ${orderLabels[order.orderStatus] || order.orderStatus} · Thanh toán: ${order.paymentStatus === "paid" ? "đã thanh toán" : order.paymentStatus === "failed" ? "thất bại" : "chưa thanh toán"}`;
       card.append(title, status);
+      const items = document.createElement("ul");
+      items.className = "customer-order-items";
+      for (const item of order.items ?? []) {
+        const line = document.createElement("li");
+        line.textContent = `${item.productName} · ${item.quantity} × ${currency.format(Number(item.unitPriceVnd))}`;
+        items.append(line);
+      }
+      if (items.childElementCount) card.append(items);
       if (order.blockchainTxHash) {
         const proof = document.createElement("small");
         proof.textContent = `Đã ghi nhận trên LabChain Local · ${order.blockchainTxHash.slice(0, 14)}…`;

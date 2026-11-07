@@ -366,11 +366,28 @@ app.get("/api/orders", requireUser, async (request, response) => {
         blockchain_tx_hash AS blockchainTxHash, blockchain_status AS blockchainStatus, created_at AS createdAt
        FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`, [request.session.user.id],
     );
-    response.json({ orders });
+    response.json({ orders: await attachOrderItems(orders) });
   } catch {
     response.status(503).json({ error: "Chưa đọc được lịch sử đơn hàng." });
   }
 });
+
+async function attachOrderItems(orders) {
+  if (!orders.length) return [];
+  const ids = orders.map((order) => order.id);
+  const placeholders = ids.map(() => "?").join(", ");
+  const [items] = await pool.execute(
+    `SELECT order_id AS orderId, product_name AS productName, unit_price_vnd AS unitPriceVnd, quantity
+     FROM order_items WHERE order_id IN (${placeholders}) ORDER BY order_id, id`, ids,
+  );
+  const byOrder = new Map();
+  for (const item of items) {
+    const key = String(item.orderId);
+    if (!byOrder.has(key)) byOrder.set(key, []);
+    byOrder.get(key).push(item);
+  }
+  return orders.map((order) => ({ ...order, items: byOrder.get(String(order.id)) ?? [] }));
+}
 
 app.get("/api/payments/vnpay/return", async (request, response) => {
   const { search, valid } = parseVnpayRequest(request);
@@ -408,7 +425,7 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
         blockchain_status AS blockchainStatus, created_at AS createdAt
        FROM orders ORDER BY created_at DESC LIMIT 100`,
     );
-    response.json({ orders });
+    response.json({ orders: await attachOrderItems(orders) });
   } catch {
     response.status(503).json({ error: "Chưa đọc được đơn hàng từ MySQL." });
   }
