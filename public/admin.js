@@ -1,3 +1,5 @@
+import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
+
 const $ = (selector) => document.querySelector(selector);
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const orderStates = [
@@ -7,6 +9,7 @@ const orderStates = [
 let deployment = null;
 let walletAccount = null;
 let categories = [];
+let users = [];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -58,12 +61,105 @@ async function loadOrders() {
   target.replaceChildren(emptyNode("Đang tải đơn hàng…"));
   try {
     const { orders } = await api("/api/admin/orders");
+    $("#stat-orders").textContent = String(orders.length);
+    $("#stat-pending").textContent = String(orders.filter((order) => order.orderStatus === "pending").length);
     target.replaceChildren();
     if (!orders.length) return target.append(emptyNode("Chưa có đơn hàng."));
     for (const order of orders) target.append(renderOrder(order));
   } catch (error) {
-    target.replaceChildren(emptyNode(error.message));
+    target.replaceChildren(emptyNode(vietnameseError(error, "Chưa tải được đơn hàng.")));
   }
+}
+
+function renderUsers() {
+  const target = $("#admin-users");
+  const query = $("#users-search").value.trim().toLocaleLowerCase("vi");
+  const filtered = users.filter((user) => [user.fullName, user.username, user.phone, user.email, user.address]
+    .some((value) => String(value ?? "").toLocaleLowerCase("vi").includes(query)));
+  target.replaceChildren();
+  if (!filtered.length) {
+    const row = document.createElement("tr");
+    row.className = "table-empty-row";
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.textContent = users.length ? "Không tìm thấy người dùng phù hợp." : "Chưa có tài khoản khách hàng.";
+    row.append(cell);
+    target.append(row);
+    return;
+  }
+  for (const user of filtered) {
+    const row = document.createElement("tr");
+    const identity = document.createElement("td");
+    identity.className = "user-identity";
+    const name = document.createElement("strong");
+    name.textContent = user.fullName;
+    const username = document.createElement("small");
+    username.textContent = `@${user.username}`;
+    identity.append(name, username);
+    const contact = document.createElement("td");
+    contact.className = "user-contact";
+    const email = document.createElement("span");
+    email.textContent = user.email;
+    const phone = document.createElement("small");
+    phone.textContent = user.phone;
+    contact.append(email, phone);
+    const orderCount = document.createElement("td");
+    orderCount.textContent = String(user.orderCount ?? 0);
+    const joined = document.createElement("td");
+    joined.textContent = user.createdAt ? new Date(user.createdAt).toLocaleDateString("vi-VN") : "—";
+    const actions = document.createElement("td");
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "table-action";
+    edit.textContent = "Chỉnh sửa";
+    edit.addEventListener("click", () => openUserEditor(user));
+    actions.append(edit);
+    row.append(identity, contact, orderCount, joined, actions);
+    target.append(row);
+  }
+}
+
+async function loadUsers() {
+  const target = $("#admin-users");
+  target.replaceChildren();
+  const loading = document.createElement("tr");
+  loading.className = "table-empty-row";
+  const cell = document.createElement("td");
+  cell.colSpan = 5;
+  cell.textContent = "Đang tải danh sách người dùng…";
+  loading.append(cell);
+  target.append(loading);
+  $("#admin-users-message").textContent = "";
+  try {
+    const result = await api("/api/admin/users");
+    users = result.users;
+    $("#stat-users").textContent = String(users.length);
+    renderUsers();
+  } catch (error) {
+    users = [];
+    $("#stat-users").textContent = "—";
+    target.replaceChildren();
+    const row = document.createElement("tr");
+    row.className = "table-empty-row";
+    const errorCell = document.createElement("td");
+    errorCell.colSpan = 5;
+    errorCell.textContent = vietnameseError(error, "Chưa tải được danh sách người dùng.");
+    row.append(errorCell);
+    target.append(row);
+  }
+}
+
+function openUserEditor(user) {
+  const form = $("#user-form");
+  form.elements.id.value = user.id;
+  form.elements.fullName.value = user.fullName ?? "";
+  form.elements.username.value = user.username ?? "";
+  form.elements.phone.value = user.phone ?? "";
+  form.elements.email.value = user.email ?? "";
+  form.elements.address.value = user.address ?? "";
+  $("#user-dialog-title").textContent = `Cập nhật ${user.fullName}`;
+  $("#user-form-message").textContent = "";
+  $("#user-dialog").showModal();
 }
 
 function renderOrder(order) {
@@ -116,7 +212,7 @@ function renderOrder(order) {
       await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
       announce(`Đã cập nhật đơn ${order.orderCode}. Ghi trạng thái mới lên blockchain khi cần.`);
       await loadOrders();
-    } catch (error) { announce(error.message, true); }
+    } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được đơn hàng."), true); }
   });
   controls.append(status, saveStatus);
   if (order.paymentMethod === "cod" && order.paymentStatus !== "paid" && order.orderStatus === "delivered") {
@@ -129,7 +225,7 @@ function renderOrder(order) {
         await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ paymentStatus: "paid" }) });
         announce(`Đã cập nhật thanh toán COD cho ${order.orderCode}.`);
         await loadOrders();
-      } catch (error) { announce(error.message, true); }
+      } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được thanh toán COD."), true); }
     });
     controls.append(paid);
   }
@@ -189,6 +285,10 @@ async function connectWallet() {
     chain = await window.ethereum.request({ method: "eth_chainId" });
   }
   if (chain !== "0x7a69") throw new Error("Hãy chọn mạng LabChain Local (Chain ID 31337) trong MetaMask.");
+  const contractCode = await window.ethereum.request({ method: "eth_getCode", params: [deployment.address, "latest"] });
+  if (!contractCode || contractCode === "0x") {
+    throw new Error("Không tìm thấy hợp đồng trên mạng LabChain Local. Mạng có thể vừa khởi động lại; hãy triển khai lại hợp đồng.");
+  }
   $("#wallet-status").textContent = `Đã kết nối ví admin ${walletAccount}`;
   return walletAccount;
 }
@@ -218,7 +318,7 @@ async function anchorOrder(order, button) {
     announce(`Đã ghi nhận đơn ${order.orderCode} lên blockchain local. Mã giao dịch: ${txHash}`);
     await loadOrders();
   } catch (error) {
-    announce(error.message || "Chưa ghi được giao dịch blockchain.", true);
+    announce(vietnameseError(error, "Chưa ghi được giao dịch blockchain."), true);
     button.disabled = false;
   }
 }
@@ -292,6 +392,7 @@ async function loadProducts() {
   try {
     await loadCategories();
     const { products } = await api("/api/admin/products");
+    $("#stat-products").textContent = String(products.length);
     target.replaceChildren();
     if (!products.length) return target.append(emptyNode("Chưa có sản phẩm."));
     for (const product of products) {
@@ -321,7 +422,7 @@ async function loadProducts() {
         try {
           await api(`/api/admin/products/${product.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !product.isActive }) });
           await loadProducts();
-        } catch (error) { announce(error.message, true); }
+        } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được sản phẩm."), true); }
       });
       actions.append(edit, toggle);
       top.append(info, actions);
@@ -329,7 +430,8 @@ async function loadProducts() {
       target.append(card);
     }
   } catch (error) {
-    target.replaceChildren(emptyNode(error.message));
+    $("#stat-products").textContent = "—";
+    target.replaceChildren(emptyNode(vietnameseError(error, "Chưa tải được sản phẩm.")));
   }
 }
 
@@ -342,29 +444,60 @@ async function initialize() {
       return;
     }
     $("#admin-user").textContent = `Xin chào, ${user.fullName}`;
+    $("#admin-logout").hidden = false;
     $("#admin-dashboard").hidden = false;
-    await Promise.all([loadDeployment(), loadOrders(), loadProducts()]);
+    await Promise.all([loadDeployment(), loadOrders(), loadProducts(), loadUsers()]);
   } catch (error) {
     $("#admin-login-needed").hidden = false;
     $("#admin-user").textContent = "Chưa thể kiểm tra đăng nhập";
-    announce(error.message, true);
+    announce(vietnameseError(error, "Chưa kiểm tra được phiên đăng nhập."), true);
   }
 }
 
 document.querySelectorAll("[data-panel]").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll("[data-panel]").forEach((tab) => tab.classList.toggle("active", tab === button));
-    $("#orders-panel").hidden = button.dataset.panel !== "orders";
-    $("#products-panel").hidden = button.dataset.panel !== "products";
+    document.querySelectorAll(".admin-panel").forEach((panel) => {
+      panel.hidden = panel.id !== `${button.dataset.panel}-panel`;
+    });
   });
 });
 
 $("#wallet-connect").addEventListener("click", async () => {
   try { await connectWallet(); announce("Đã kết nối ví admin với mạng LabChain Local."); }
-  catch (error) { announce(error.message, true); }
+  catch (error) { announce(vietnameseError(error, "Chưa kết nối được MetaMask."), true); }
 });
 $("#orders-reload").addEventListener("click", loadOrders);
+$("#users-reload").addEventListener("click", loadUsers);
 $("#products-reload").addEventListener("click", loadProducts);
+$("#users-search").addEventListener("input", renderUsers);
+$("#user-dialog-close").addEventListener("click", () => $("#user-dialog").close());
+$("#user-cancel").addEventListener("click", () => $("#user-dialog").close());
+$("#user-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  const body = {
+    fullName: form.elements.fullName.value,
+    phone: form.elements.phone.value,
+    email: form.elements.email.value,
+    address: form.elements.address.value,
+  };
+  try {
+    await api(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    $("#user-dialog").close();
+    announce("Đã cập nhật thông tin người dùng.");
+    await loadUsers();
+  } catch (error) {
+    $("#user-form-message").textContent = vietnameseError(error, "Chưa cập nhật được người dùng.");
+  }
+});
+$("#admin-logout").addEventListener("click", async () => {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    window.location.assign("/");
+  } catch (error) { announce(vietnameseError(error, "Chưa đăng xuất được."), true); }
+});
 $("#product-reset").addEventListener("click", () => populateProductForm(null));
 $("#category-reset").addEventListener("click", () => populateCategoryForm(null));
 $("#category-form").addEventListener("submit", async (event) => {
@@ -379,7 +512,7 @@ $("#category-form").addEventListener("submit", async (event) => {
     populateCategoryForm(null);
     $("#category-message").textContent = id ? "Đã cập nhật danh mục." : "Đã thêm danh mục.";
     await loadProducts();
-  } catch (error) { $("#category-message").textContent = error.message; }
+  } catch (error) { $("#category-message").textContent = vietnameseError(error, "Chưa lưu được danh mục."); }
 });
 $("#product-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -394,7 +527,8 @@ $("#product-form").addEventListener("submit", async (event) => {
     $("#product-message").textContent = id ? "Đã cập nhật sản phẩm." : `Đã thêm sản phẩm #${result.id}.`;
     populateProductForm(null);
     await loadProducts();
-  } catch (error) { $("#product-message").textContent = error.message; }
+  } catch (error) { $("#product-message").textContent = vietnameseError(error, "Chưa lưu được sản phẩm."); }
 });
 
 initialize();
+installVietnameseValidation();

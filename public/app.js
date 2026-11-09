@@ -1,8 +1,10 @@
+import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
+
 const demoProducts = [
-  { id: 1, name: "Xiaomi Watch S4", slug: "xiaomi-watch-s4", shortDescription: "AMOLED 1,43 inch · GNSS tích hợp · Pin tới 15 ngày", priceVnd: 3990000, compareAtVnd: 4490000, stock: 12, imageUrl: "/assets/watch-s4.svg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px, tối đa 1500 nit HBM", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "486 mAh, tới 15 ngày, 5ATM" } },
-  { id: 2, name: "Xiaomi Watch 2", slug: "xiaomi-watch-2", shortDescription: "Wear OS by Google · Snapdragon W5+ Gen 1 · Pin tới 65 giờ", priceVnd: 4490000, compareAtVnd: 4990000, stock: 8, imageUrl: "/assets/watch-2.svg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px", "Nền tảng": "Snapdragon W5+ Gen 1, Wear OS by Google", "Pin và kháng nước": "495 mAh, tới 65 giờ, 5ATM" } },
-  { id: 3, name: "Redmi Watch 5", slug: "redmi-watch-5", shortDescription: "AMOLED 2,07 inch · GNSS tích hợp · Pin tới 24 ngày", priceVnd: 1790000, compareAtVnd: 1990000, stock: 20, imageUrl: "/assets/redmi-watch-5.svg", categoryName: "Đồng hồ Redmi", categorySlug: "dong-ho-redmi", specifications: { "Màn hình": "AMOLED 2,07 inch, 432 × 514 px, tối đa 1500 nit", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "550 mAh, tới 24 ngày, 5ATM" } },
-  { id: 4, name: "Xiaomi Smart Band 9 Pro", slug: "xiaomi-smart-band-9-pro", shortDescription: "AMOLED 1,74 inch · GNSS tích hợp · Pin tới 21 ngày", priceVnd: 1590000, compareAtVnd: 1890000, stock: 18, imageUrl: "/assets/smart-band-9-pro.svg", categoryName: "Vòng đeo thông minh", categorySlug: "vong-deo-thong-minh", specifications: { "Màn hình": "AMOLED 1,74 inch, 336 × 480 px", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "Tới 21 ngày, 5ATM" } },
+  { id: 1, name: "Xiaomi Watch S4", slug: "xiaomi-watch-s4", shortDescription: "AMOLED 1,43 inch · GNSS tích hợp · Pin tới 15 ngày", priceVnd: 3990000, compareAtVnd: 4490000, stock: 12, imageUrl: "/assets/xiaomi-watch-s4.jpg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px, tối đa 1500 nit HBM", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "486 mAh, tới 15 ngày, 5ATM" } },
+  { id: 2, name: "Xiaomi Watch 2", slug: "xiaomi-watch-2", shortDescription: "Wear OS by Google · Snapdragon W5+ Gen 1 · Pin tới 65 giờ", priceVnd: 4490000, compareAtVnd: 4990000, stock: 8, imageUrl: "/assets/xiaomi-watch-2.jpg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px", "Nền tảng": "Snapdragon W5+ Gen 1, Wear OS by Google", "Pin và kháng nước": "495 mAh, tới 65 giờ, 5ATM" } },
+  { id: 3, name: "Redmi Watch 5", slug: "redmi-watch-5", shortDescription: "AMOLED 2,07 inch · GNSS tích hợp · Pin tới 24 ngày", priceVnd: 1790000, compareAtVnd: 1990000, stock: 20, imageUrl: "/assets/redmi-watch-5.jpg", categoryName: "Đồng hồ Redmi", categorySlug: "dong-ho-redmi", specifications: { "Màn hình": "AMOLED 2,07 inch, 432 × 514 px, tối đa 1500 nit", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "550 mAh, tới 24 ngày, 5ATM" } },
+  { id: 4, name: "Xiaomi Smart Band 9 Pro", slug: "xiaomi-smart-band-9-pro", shortDescription: "AMOLED 1,74 inch · GNSS tích hợp · Pin tới 21 ngày", priceVnd: 1590000, compareAtVnd: 1890000, stock: 18, imageUrl: "/assets/smart-band-9-pro.png", categoryName: "Vòng đeo thông minh", categorySlug: "vong-deo-thong-minh", specifications: { "Màn hình": "AMOLED 1,74 inch, 336 × 480 px", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "Tới 21 ngày, 5ATM" } },
 ];
 
 const state = {
@@ -105,6 +107,7 @@ function renderProducts() {
   for (const product of products) {
     const card = document.createElement("article");
     card.className = "product-card";
+    card.dataset.productSlug = product.slug;
     const visual = document.createElement("div");
     visual.className = "product-visual";
     const label = document.createElement("span");
@@ -117,7 +120,7 @@ function renderProducts() {
     favorite.textContent = "♡";
     const image = document.createElement("img");
     image.src = productImage(product);
-    image.alt = "Đồng hồ " + product.name;
+    image.alt = "Ảnh sản phẩm " + product.name;
     image.loading = "lazy";
     visual.append(label, favorite, image);
 
@@ -251,6 +254,19 @@ function closeDialog(dialog) {
   if ($("#account-dialog").hidden && $("#checkout-dialog").hidden) document.body.classList.remove("modal-open");
 }
 
+function fillCheckoutFromProfile(overwrite = false) {
+  if (!state.user) return;
+  const fields = {
+    shippingName: state.user.fullName,
+    shippingPhone: state.user.phone,
+    shippingAddress: state.user.address,
+  };
+  for (const [name, value] of Object.entries(fields)) {
+    const input = $("#checkout-form").elements.namedItem(name);
+    if (overwrite || !input.value.trim()) input.value = value || "";
+  }
+}
+
 function openCart() {
   cartDrawer.classList.add("open");
   cartDrawer.setAttribute("aria-hidden", "false");
@@ -264,11 +280,18 @@ function closeCart() {
 }
 
 function setUser(user) {
+  const previousUserId = state.user?.id;
   state.user = user;
   $("#account-label").textContent = user ? user.fullName : "Đăng nhập";
   $("#account-orders").hidden = !user;
   $("#login-form").hidden = Boolean(user);
   if (user) $("#register-form").hidden = true;
+  if (user) fillCheckoutFromProfile(previousUserId !== user.id);
+  else {
+    for (const field of ["shippingName", "shippingPhone", "shippingAddress"]) {
+      $("#checkout-form").elements.namedItem(field).value = "";
+    }
+  }
 }
 
 async function loadUser() {
@@ -333,7 +356,7 @@ async function loadOrders() {
       target.append(card);
     }
   } catch (error) {
-    target.textContent = error.message;
+    target.textContent = vietnameseError(error, "Chưa tải được đơn hàng. Vui lòng thử lại.");
   }
 }
 
@@ -362,10 +385,14 @@ async function submitAuth(form, endpoint) {
   try {
     const { user } = await api(endpoint, { method: "POST", body: JSON.stringify(body) });
     setUser(user);
+    if (endpoint === "/api/auth/login" && user.role === "admin") {
+      window.location.assign("/admin.html");
+      return;
+    }
     closeDialog(accountDialog);
     form.reset();
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = vietnameseError(error, "Chưa đăng nhập được. Vui lòng thử lại.");
   }
 }
 
@@ -384,7 +411,7 @@ $("#logout-button").addEventListener("click", async () => {
     setUser(null);
     closeDialog(accountDialog);
   } catch (error) {
-    $("#account-message").textContent = error.message;
+    $("#account-message").textContent = vietnameseError(error, "Chưa đăng xuất được. Vui lòng thử lại.");
   }
 });
 
@@ -440,6 +467,7 @@ $("#checkout-open").addEventListener("click", () => {
     openDialog(accountDialog);
     return;
   }
+  fillCheckoutFromProfile();
   openDialog(checkoutDialog);
 });
 
@@ -486,7 +514,7 @@ $("#checkout-form").addEventListener("submit", async (event) => {
     closeDialog(checkoutDialog);
     window.alert("Đã tạo đơn " + result.order.orderCode + ". Bạn có thể xem trạng thái trong tài khoản.");
   } catch (error) {
-    message.textContent = error.message;
+    message.textContent = vietnameseError(error, "Chưa tạo được đơn hàng. Vui lòng thử lại.");
   } finally {
     form.dataset.submitting = "false";
     submitButton.disabled = false;
@@ -517,3 +545,5 @@ if (paymentResult) {
   if (labels[paymentResult]) window.setTimeout(() => window.alert(labels[paymentResult]), 100);
   window.history.replaceState({}, "", "/");
 }
+
+installVietnameseValidation();

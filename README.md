@@ -70,7 +70,7 @@ VNPay có sandbox để mô phỏng giao dịch; đây là thanh toán thử, kh
 
 Tài liệu tích hợp thanh toán: [VNPay Pay API](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html). Trang trả kết quả thanh toán có thể trở lại `127.0.0.1` trên cùng máy. IPN server-to-server từ VNPay không truy cập được localhost; muốn trình diễn IPN cần một URL HTTPS công khai/tunnel và đăng ký endpoint `/api/payments/vnpay/ipn` trong cấu hình merchant VNPay.
 
-Thông số bốn sản phẩm mẫu được đối chiếu từ các trang Xiaomi: [Watch S4](https://www.mi.com/ae-en/product/xiaomi-watch-s4/specs/), [Watch 2](https://www.mi.com/global/product/xiaomi-watch-2/), [Redmi Watch 5](https://www.mi.com/ph/product/redmi-watch-5/specs/) và [Smart Band 9 Pro](https://www.mi.com/uk/product/xiaomi-smart-band-9-pro/specs/). Thời lượng pin là mức công bố theo điều kiện thử nghiệm của hãng.
+Thông số bốn sản phẩm mẫu được đối chiếu từ các trang Xiaomi: [Watch S4](https://www.mi.com/ae-en/product/xiaomi-watch-s4/specs/), [Watch 2](https://www.mi.com/global/product/xiaomi-watch-2/), [Redmi Watch 5](https://www.mi.com/ph/product/redmi-watch-5/specs/) và [Smart Band 9 Pro](https://www.mi.com/uk/product/xiaomi-smart-band-9-pro/specs/). Ảnh sản phẩm trong `public/assets` được tải từ CDN hiển thị trên các trang sản phẩm chính thức của [Watch S4](https://www.mi.com/sg/product/xiaomi-watch-s4/), [Watch 2](https://www.mi.com/global/product/xiaomi-watch-2/), [Redmi Watch 5](https://www.mi.com/uk/product/redmi-watch-5/) và [Smart Band 9 Pro](https://www.mi.com/global/product/xiaomi-smart-band-9-pro/). Ảnh được dùng cho bản demo local của đồ án; quyền hình ảnh thuộc Xiaomi. Thời lượng pin là mức công bố theo điều kiện thử nghiệm của hãng.
 
 ## GitHub
 

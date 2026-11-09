@@ -34,7 +34,7 @@ button{cursor:pointer}
 .hero-note{display:flex;align-items:center;gap:9px;color:#7c837d;font-size:10px;margin-top:31px}
 .note-line{width:24px;height:1px;background:#9da59a}
 .hero-art{height:400px;position:relative;display:grid;place-items:center}
-.hero-art img{z-index:1;position:relative;width:min(380px,75%);height:auto;filter:drop-shadow(0 25px 18px #27312b26);transform:rotate(5deg)}
+.hero-art img{z-index:1;position:relative;width:min(430px,90%);height:310px;object-fit:cover;object-position:center;border-radius:22px;mix-blend-mode:multiply;filter:drop-shadow(0 18px 15px #27312b20)}
 .art-glow{position:absolute;width:280px;height:280px;border-radius:50%;background:#d2f26a;filter:blur(60px);opacity:.42}
 .art-orbit{position:absolute;border:1px solid #bec5b9;border-radius:50%;transform:rotate(-24deg)}
 .orbit-one{width:390px;height:210px}
@@ -68,9 +68,11 @@ button{cursor:pointer}
 .product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:17px}
 .product-card{background:#fbfbf8;border:1px solid #e6e8e2;border-radius:9px;overflow:hidden;transition:transform .2s,border-color .2s}
 .product-card:hover{transform:translateY(-4px);border-color:#cbd2c3}
-.product-visual{height:245px;position:relative;display:grid;place-items:center;overflow:hidden;background:linear-gradient(140deg,#e8ebe3,#f3f3ef)}
+.product-visual{height:245px;position:relative;display:grid;place-items:center;overflow:hidden;background:#fff}
 .product-visual:after{content:"";position:absolute;width:160px;height:160px;background:#d7f37c;border-radius:50%;filter:blur(45px);opacity:.43}
-.product-visual img{position:relative;z-index:1;width:66%;height:90%;object-fit:contain;transition:transform .25s}
+.product-visual img{position:relative;z-index:1;width:100%;height:100%;object-fit:cover;object-position:center;transition:transform .25s}
+.product-card[data-product-slug="xiaomi-watch-2"] .product-visual img{object-position:70% center}
+.product-card[data-product-slug="redmi-watch-5"] .product-visual img{object-position:58% center}
 .product-card:hover .product-visual img{transform:scale(1.04) rotate(-3deg)}
 .product-label{position:absolute;z-index:2;top:13px;left:13px;background:#fff;padding:6px 8px;border-radius:3px;color:#5d6655;font-size:8px;letter-spacing:.1em}
 .favorite-button{position:absolute;z-index:2;right:12px;top:9px;border:0;background:#fff9;border-radius:50%;width:28px;height:28px;color:#656d6b;font-size:16px}
@@ -135,14 +137,13 @@ button{cursor:pointer}
 .form-stack{display:grid;gap:13px}
 .form-stack[hidden]{display:none}
 .form-stack>label{display:grid;gap:6px;font-size:10px;color:#68716b}
-.form-stack input,.form-stack textarea{width:100%;min-height:40px;padding:9px 11px;border:1px solid #d9ded6;border-radius:5px;background:#fff;outline:none;color:#202529;font-size:12px}
-.form-stack input:focus,.form-stack textarea:focus{border-color:#8fa947;box-shadow:0 0 0 3px #d4f26a44}
+.form-stack input:not([type="radio"]):not([type="checkbox"]),.form-stack textarea{width:100%;min-height:40px;padding:9px 11px;border:1px solid #d9ded6;border-radius:5px;background:#fff;outline:none;color:#202529;font-size:12px}
+.form-stack input:not([type="radio"]):not([type="checkbox"]):focus,.form-stack textarea:focus{border-color:#8fa947;box-shadow:0 0 0 3px #d4f26a44}
 .form-stack>.primary-button{margin-top:5px;width:100%}
 .form-message{font-size:10px;color:#8b443a;min-height:14px;margin:0}
 .payment-options{display:grid;gap:9px;border:1px solid var(--line);border-radius:6px;padding:11px 13px}
 .payment-options legend{font-size:10px;font-weight:700;padding:0 5px}
-.payment-options label{display:flex;align-items:center;gap:8px;font-size:10px;color:#5f6861}
-.payment-options input{accent-color:#697f2b}
+.payment-options input[type="radio"]{flex:0 0 18px;width:18px;height:18px;min-height:18px;margin:0;padding:0;accent-color:#697f2b}
 @media(max-width:900px){.hero{padding-left:6vw;padding-right:6vw;min-height:500px}.hero-art{height:330px}.product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.products-section{padding-top:65px}.product-visual{height:230px}.story-banner{margin-left:5vw;margin-right:5vw}}
 @media(max-width:620px){.announcement{font-size:8px}.site-header{height:63px;padding:0 16px}.brand{font-size:18px}.desktop-nav{display:none}.header-actions{gap:3px}.icon-button{font-size:0;padding:0 8px}.icon-button:before{content:"♙";font-size:19px}.cart-button{height:36px;padding:0 10px;font-size:10px}.hero{display:block;padding:51px 23px 72px;min-height:660px}.hero-copy{padding:0}.hero h1{font-size:43px}.hero-description{font-size:12px;max-width:340px}.hero-art{height:325px;margin-top:9px}.hero-art img{width:260px}.orbit-one{width:290px;height:160px}.orbit-two{height:300px;width:220px}.art-tag{top:20px;right:0}.art-index{bottom:20px}.hero-bottom{left:23px;right:23px;bottom:20px;font-size:8px}.benefits{grid-template-columns:1fr;gap:14px;padding:20px 24px}.products-section{padding:57px 18px 62px}.section-heading{align-items:flex-start}.section-aside{display:none}.catalog-controls{align-items:flex-start;flex-direction:column}.category-list{order:2}.search-sort{width:100%;order:1}.search-box{flex:1}.search-sort select{max-width:120px}.product-grid{gap:10px}.product-visual{height:175px}.product-info{padding:11px}.product-name{font-size:11px}.product-description{font-size:8px;height:30px}.product-price{font-size:10px}.old-price{font-size:8px}.add-button{width:30px;height:30px}.product-label{top:8px;left:8px;font-size:7px}.favorite-button{top:7px;right:7px;width:24px;height:24px}.story-banner{margin:0 18px 58px;padding:33px 25px;min-height:275px}.story-mark{position:absolute;right:-40px;bottom:-25px;width:145px;height:145px;opacity:.6}.story-mark span{font-size:40px}.story-mark i{bottom:28px}.story-banner>div:first-child{z-index:2}.story-banner p:not(.eyebrow){max-width:270px}.site-footer{padding:18px;display:grid;grid-template-columns:1fr auto;gap:10px}.site-footer p{grid-column:1/-1;grid-row:2;margin:0}.footer-brand{grid-row:1;grid-column:1}.site-footer>a:last-child{grid-row:1;grid-column:2}.dialog-card{padding:24px 19px}.cart-drawer{padding:20px}}
 /* Account order history */
@@ -160,3 +161,40 @@ button{cursor:pointer}
 .payment-note { grid-column: 1 / -1; margin: 0; color: #68716b; font-size: 10px; line-height: 1.5; }
 .payment-options input:disabled + span { color: #8a918d; }
 @media(max-width:620px){.product-specs{min-height:28px;font-size:7px;margin:4px 0 9px}}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.checkout-card{width:min(600px,100%);padding:32px;max-height:min(92dvh,820px);border:1px solid #e7e9e3;border-radius:14px;box-shadow:0 24px 80px #11181926}
+.checkout-card>.close-button{top:24px;right:24px;width:38px;height:38px}
+.checkout-heading{padding-right:45px;margin-bottom:25px}
+.checkout-heading .eyebrow{margin-bottom:9px}
+.checkout-heading h2{font-size:28px;margin:0 0 8px;letter-spacing:-.045em}
+.checkout-heading>p:last-child{margin:0;color:#727b75;font-size:13px;line-height:1.6}
+.checkout-form{gap:18px}
+.checkout-section{display:grid;gap:15px;padding-bottom:19px;border-bottom:1px solid #e7eae4}
+.checkout-section-heading{display:flex;align-items:flex-start;gap:11px}
+.checkout-step{display:grid;place-items:center;flex:0 0 29px;height:29px;border-radius:50%;background:#eff3e5;color:#687d32;font-size:10px;font-weight:750}
+.checkout-section-heading h3{margin:1px 0 4px;color:#202529;font-size:14px;letter-spacing:-.015em}
+.checkout-section-heading p{margin:0;color:#7a827d;font-size:11px;line-height:1.5}
+.recipient-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.field-label{display:grid;gap:7px;color:#4f5953;font-size:11px;font-weight:650}
+.field-label input:not([type="radio"]):not([type="checkbox"]),.field-label textarea{width:100%;min-height:44px;padding:11px 12px;border:1px solid #d8ded7;border-radius:7px;background:#fff;outline:none;color:#202529;font-size:13px;font-weight:400;transition:border-color .15s,box-shadow .15s}
+.field-label input::placeholder,.field-label textarea::placeholder{color:#a0a8a2}
+.field-label input:focus,.field-label textarea:focus{border-color:#8fa947;box-shadow:0 0 0 3px #d4f26a40}
+.field-label textarea{min-height:78px;resize:vertical;line-height:1.5}
+.field-span{grid-column:1/-1}
+.checkout-payment-section{padding-bottom:17px}
+.payment-options{display:grid;gap:9px;margin:0;padding:0;border:0}
+.payment-choice{display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:66px;padding:12px 14px;border:1px solid #dfe4de;border-radius:9px;background:#fff;cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+.payment-choice:has(input:checked){border-color:#8da844;background:#f8faef;box-shadow:0 0 0 2px #8da84417}
+.payment-choice:has(input:disabled){cursor:not-allowed;opacity:.58}
+.payment-choice-copy{display:grid;gap:4px}
+.payment-choice-copy strong{color:#28312b;font-size:12px;font-weight:700}
+.payment-choice-copy small{color:#778079;font-size:10px;line-height:1.45}
+.payment-tag{justify-self:end;padding:5px 8px;border-radius:20px;background:#eef2e7;color:#657a31;font-size:9px;font-weight:700;white-space:nowrap}
+.payment-tag-test{background:#eef2f5;color:#65717a}
+.payment-note{grid-column:1/-1;margin:2px 0 0;color:#727b75;font-size:10px;line-height:1.5}
+.checkout-submit{width:100%;min-height:50px;margin-top:0;border-radius:7px;font-size:13px}
+@media(max-width:620px){.checkout-card{padding:25px 19px}.checkout-card>.close-button{top:18px;right:17px;width:34px;height:34px}.checkout-heading{margin-bottom:20px}.checkout-heading h2{font-size:24px}.checkout-heading>p:last-child{font-size:12px}.checkout-form{gap:15px}.recipient-fields{grid-template-columns:1fr;gap:12px}.field-span{grid-column:auto}.payment-choice{grid-template-columns:18px minmax(0,1fr);gap:10px;padding:11px}.payment-tag{grid-column:2;justify-self:start;margin-top:-3px}.payment-choice-copy strong{font-size:11px}}
+.not-found-page{display:grid;min-height:100vh;place-items:center;padding:24px;background:#f3f5f2}
+.not-found-card{width:min(540px,100%);padding:40px;border:1px solid #e1e7e1;border-radius:14px;background:#fff;box-shadow:0 12px 40px #17221d12}
+.not-found-card h1{margin:0 0 12px;color:#202925;font-size:clamp(30px,6vw,44px);letter-spacing:-.05em}
+.not-found-card>p:not(.eyebrow){margin:0 0 24px;color:#6d7771;font-size:14px;line-height:1.7}

@@ -37,7 +37,7 @@
           <div class="art-orbit orbit-one"></div>
           <div class="art-orbit orbit-two"></div>
           <div class="art-glow"></div>
-          <img src="/assets/watch-placeholder.svg" alt="">
+          <img src="/assets/xiaomi-watch-s4.jpg" alt="Ảnh thật bộ sưu tập Xiaomi Watch S4" fetchpriority="high">
           <div class="art-tag"><span class="tag-dot"></span> SMART, EVERY DAY</div>
           <div class="art-index">01 / 04</div>
         </div>
@@ -118,14 +118,47 @@
     </section>
 
     <section class="dialog" id="checkout-dialog" role="dialog" aria-modal="true" aria-labelledby="checkout-title" hidden>
-      <div class="dialog-card"><button class="close-button dialog-close" type="button" aria-label="Đóng">×</button><p class="eyebrow">THÔNG TIN GIAO HÀNG</p><h2 id="checkout-title">Hoàn tất đơn hàng</h2>
-        <form id="checkout-form" class="form-stack">
-          <label>Người nhận<input name="shippingName" required maxlength="120" autocomplete="name"></label>
-          <label>Số điện thoại<input name="shippingPhone" required maxlength="24" autocomplete="tel"></label>
-          <label>Địa chỉ nhận hàng<textarea name="shippingAddress" required maxlength="500" rows="2" autocomplete="street-address"></textarea></label>
-          <fieldset class="payment-options"><legend>Phương thức thanh toán</legend><label><input type="radio" name="paymentMethod" value="cod" checked> Thanh toán khi nhận hàng (COD)</label><label><input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay"><span>VNPay sandbox (giao dịch thử)</span></label><p class="payment-note" id="vnpay-availability" role="status"></p></fieldset>
+      <div class="dialog-card checkout-card">
+        <button class="close-button dialog-close" type="button" aria-label="Đóng">×</button>
+        <div class="checkout-heading">
+          <p class="eyebrow">THÔNG TIN GIAO HÀNG</p>
+          <h2 id="checkout-title">Hoàn tất đơn hàng</h2>
+          <p>Kiểm tra thông tin nhận hàng và chọn cách thanh toán phù hợp.</p>
+        </div>
+        <form id="checkout-form" class="form-stack checkout-form">
+          <section class="checkout-section" aria-labelledby="recipient-title">
+            <div class="checkout-section-heading">
+              <span class="checkout-step">01</span>
+              <div><h3 id="recipient-title">Người nhận</h3><p>Thông tin lấy từ tài khoản của bạn; có thể chỉnh riêng cho đơn hàng này.</p></div>
+            </div>
+            <div class="recipient-fields">
+              <label class="field-label">Họ và tên<input name="shippingName" required maxlength="120" autocomplete="name" placeholder="Tên người nhận"></label>
+              <label class="field-label">Số điện thoại<input name="shippingPhone" type="tel" required maxlength="24" autocomplete="tel" placeholder="Số điện thoại liên hệ"></label>
+              <label class="field-label field-span">Địa chỉ nhận hàng<textarea name="shippingAddress" required maxlength="500" rows="2" autocomplete="street-address" placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố"></textarea></label>
+            </div>
+          </section>
+          <section class="checkout-section checkout-payment-section" aria-labelledby="payment-title">
+            <div class="checkout-section-heading">
+              <span class="checkout-step">02</span>
+              <div><h3 id="payment-title">Thanh toán</h3><p>Chọn phương thức bạn muốn sử dụng.</p></div>
+            </div>
+            <fieldset class="payment-options">
+              <legend class="visually-hidden">Phương thức thanh toán</legend>
+              <label class="payment-choice">
+                <input type="radio" name="paymentMethod" value="cod" checked>
+                <span class="payment-choice-copy"><strong>Thanh toán khi nhận hàng</strong><small>Trả tiền trực tiếp khi đơn được giao</small></span>
+                <span class="payment-tag">COD</span>
+              </label>
+              <label class="payment-choice">
+                <input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay">
+                <span class="payment-choice-copy"><strong>VNPay sandbox</strong><small>Giao dịch mô phỏng trong môi trường thử nghiệm</small></span>
+                <span class="payment-tag payment-tag-test">Dùng thử</span>
+              </label>
+              <p class="payment-note" id="vnpay-availability" role="status"></p>
+            </fieldset>
+          </section>
           <p class="form-message" id="checkout-message" role="status"></p>
-          <button class="primary-button" type="submit">Tạo đơn hàng <span>→</span></button>
+          <button class="primary-button checkout-submit" type="submit">Tạo đơn hàng <span aria-hidden="true">→</span></button>
         </form>
       </div>
     </section>

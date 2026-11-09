@@ -404,14 +404,14 @@ app.get("/api/payments/vnpay/return", async (request, response) => {
 
 app.get("/api/payments/vnpay/ipn", async (request, response) => {
   const { search, valid } = parseVnpayRequest(request);
-  if (!valid) return response.json({ RspCode: "97", Message: "Invalid signature" });
+  if (!valid) return response.json({ RspCode: "97", Message: "Chữ ký không hợp lệ" });
   try {
     const result = await applyVnpayResult(search);
-    if (!result.found) return response.json({ RspCode: "01", Message: "Order not found" });
-    if (result.invalidAmount) return response.json({ RspCode: "04", Message: "Invalid amount" });
+    if (!result.found) return response.json({ RspCode: "01", Message: "Không tìm thấy đơn hàng" });
+    if (result.invalidAmount) return response.json({ RspCode: "04", Message: "Số tiền không hợp lệ" });
     response.json({ RspCode: "00", Message: result.alreadyPaid ? "Order already confirmed" : "Confirm Success" });
   } catch {
-    response.json({ RspCode: "99", Message: "Unknown error" });
+    response.json({ RspCode: "99", Message: "Có lỗi chưa xác định" });
   }
 });
 
@@ -428,6 +428,47 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
     response.json({ orders: await attachOrderItems(orders) });
   } catch {
     response.status(503).json({ error: "Chưa đọc được đơn hàng từ MySQL." });
+  }
+});
+
+app.get("/api/admin/users", requireUser, requireAdmin, async (_request, response) => {
+  try {
+    const [users] = await pool.execute(
+      `SELECT u.id, u.full_name AS fullName, u.username, u.phone, u.email, u.address,
+        u.created_at AS createdAt, COUNT(o.id) AS orderCount
+       FROM users u LEFT JOIN orders o ON o.user_id = u.id
+       WHERE u.role = 'customer'
+       GROUP BY u.id, u.full_name, u.username, u.phone, u.email, u.address, u.created_at
+       ORDER BY u.created_at DESC LIMIT 500`,
+    );
+    response.json({ users });
+  } catch {
+    response.status(503).json({ error: "Chưa đọc được danh sách người dùng từ MySQL." });
+  }
+});
+
+app.patch("/api/admin/users/:id", requireUser, requireAdmin, async (request, response) => {
+  const id = Number(request.params.id);
+  const fullName = cleanText(request.body?.fullName, 120);
+  const phone = cleanText(request.body?.phone, 24);
+  const email = cleanText(request.body?.email, 190).toLowerCase();
+  const address = cleanText(request.body?.address, 500);
+  if (!Number.isSafeInteger(id) || id < 1 || !fullName || !validPhone(phone)
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return response.status(400).json({ error: "Kiểm tra họ tên, số điện thoại và email." });
+  }
+  try {
+    const [result] = await pool.execute(
+      "UPDATE users SET full_name = ?, phone = ?, email = ?, address = ? WHERE id = ? AND role = 'customer'",
+      [fullName, phone, email, address || null, id],
+    );
+    if (result.affectedRows) return response.json({ ok: true });
+    const [rows] = await pool.execute("SELECT id FROM users WHERE id = ? AND role = 'customer' LIMIT 1", [id]);
+    if (rows.length) return response.json({ ok: true });
+    response.status(404).json({ error: "Không tìm thấy người dùng." });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") return response.status(409).json({ error: "Email hoặc số điện thoại đã được tài khoản khác sử dụng." });
+    response.status(503).json({ error: "Chưa cập nhật được thông tin người dùng." });
   }
 });
 
@@ -634,6 +675,13 @@ app.post("/api/admin/orders/:id/anchor", requireUser, requireAdmin, async (reque
   }
   const provider = new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
   try {
+    const activeChainId = Number(await provider.send("eth_chainId", []));
+    if (activeChainId !== chainId || (deployment.chainId != null && Number(deployment.chainId) !== activeChainId)) {
+      return response.status(503).json({ error: "Máy chủ blockchain đang dùng sai mạng. Hãy khởi động mạng LabChain Local (Chain ID 31337)." });
+    }
+    if (await provider.getCode(deployment.address) === "0x") {
+      return response.status(503).json({ error: "Không tìm thấy hợp đồng trên mạng hiện tại. Hãy chạy lại lệnh deploy:local." });
+    }
     const [orders] = await pool.execute(
       "SELECT id, order_status AS orderStatus, blockchain_key AS blockchainKey, blockchain_digest AS blockchainDigest, blockchain_tx_hash AS blockchainTxHash, blockchain_status AS blockchainStatus FROM orders WHERE id = ? LIMIT 1",
       [orderId],
@@ -663,10 +711,14 @@ app.post("/api/admin/orders/:id/anchor", requireUser, requireAdmin, async (reque
       } catch { return false; }
     });
     if (!emitted) return response.status(400).json({ error: "Không tìm thấy sự kiện xác nhận trong giao dịch." });
-    await pool.execute("UPDATE orders SET blockchain_tx_hash = ?, blockchain_status = ? WHERE id = ?", [txHash, expectedStatus, orderId]);
+    try {
+      await pool.execute("UPDATE orders SET blockchain_tx_hash = ?, blockchain_status = ? WHERE id = ?", [txHash, expectedStatus, orderId]);
+    } catch {
+      return response.status(503).json({ error: "Giao dịch đã được xác minh trên blockchain nhưng chưa lưu được mã vào MySQL. Hãy kiểm tra MySQL rồi thử lưu lại." });
+    }
     response.json({ ok: true, txHash });
   } catch (error) {
-    response.status(503).json({ error: error.code === "ECONNREFUSED" ? "Hardhat local chưa chạy." : "Chưa xác minh được giao dịch trên blockchain." });
+    response.status(503).json({ error: error.code === "ECONNREFUSED" ? "Hardhat local chưa chạy. Hãy khởi động mạng LabChain Local." : "Chưa xác minh được giao dịch trên blockchain. Hãy kiểm tra mạng LabChain Local và thử lại." });
   } finally {
     provider.destroy();
   }
@@ -674,6 +726,7 @@ app.post("/api/admin/orders/:id/anchor", requireUser, requireAdmin, async (reque
 
 app.use("/api", (_request, response) => response.status(404).json({ error: "API không tồn tại." }));
 app.use(express.static(fileURLToPath(new URL("../public/", import.meta.url)), { extensions: ["html"] }));
+app.use((_request, response) => response.status(404).sendFile(fileURLToPath(new URL("../public/404.html", import.meta.url))));
 app.use((error, _request, response, _next) => {
   console.error("Request failed:", error.message);
   if (!response.headersSent) response.status(500).json({ error: "Có lỗi nội bộ. Hãy thử lại." });

@@ -12,53 +12,93 @@
   <body class="admin-page">
     <div class="announcement">MITIME STORE <span>·</span> KHU VỰC QUẢN TRỊ</div>
     <header class="site-header admin-header">
-      <a class="brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
-      <div class="admin-header-actions"><a href="/">← Trở lại cửa hàng</a><span id="admin-user">Đang kiểm tra phiên đăng nhập…</span></div>
+      <a class="brand" href="/" aria-label="MiTime Admin"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span><span class="admin-brand-label">ADMIN</span></a>
+      <div class="admin-header-actions"><span id="admin-user">Đang kiểm tra phiên đăng nhập…</span><a href="/">Cửa hàng <span aria-hidden="true">↗</span></a><button id="admin-logout" type="button" hidden>Đăng xuất</button></div>
     </header>
     <main class="admin-main">
       <section class="admin-intro">
-        <div><p class="eyebrow">LOCAL STORE MANAGEMENT</p><h1>Quản trị cửa hàng<span>.</span></h1><p>Quản lý sản phẩm, đơn hàng và dấu xác thực trên blockchain local.</p></div>
+        <div><p class="eyebrow">BACK OFFICE · MITIME STORE</p><h1>Quản lý cửa hàng<span>.</span></h1><p>Quản lý khách hàng, danh mục, sản phẩm và quy trình xử lý đơn.</p></div>
         <div class="wallet-panel"><div><strong>Ví MetaMask</strong><p id="wallet-status">Chưa kết nối ví admin.</p></div><button id="wallet-connect" class="primary-button" type="button">Kết nối MetaMask</button></div>
       </section>
       <p id="admin-message" class="admin-message" role="status" hidden></p>
       <section id="admin-login-needed" class="admin-login-needed" hidden><h2>Cần đăng nhập bằng tài khoản admin</h2><p>Hãy đăng nhập ở cửa hàng bằng tài khoản quản trị để mở bảng điều khiển này.</p><a class="primary-button" href="/">Về trang cửa hàng</a></section>
       <div id="admin-dashboard" hidden>
-        <nav class="admin-tabs" aria-label="Quản trị"><button class="active" data-panel="orders" type="button">Đơn hàng</button><button data-panel="products" type="button">Sản phẩm</button></nav>
-        <section class="admin-panel" id="orders-panel">
-          <div class="admin-section-heading"><div><p class="eyebrow">ORDER DESK</p><h2>Đơn hàng mới nhất</h2></div><button id="orders-reload" class="secondary-button" type="button">Làm mới</button></div>
-          <div id="admin-orders" class="admin-order-list"></div>
+        <section class="admin-stats" aria-label="Tổng quan cửa hàng">
+          <article><span>Khách hàng</span><strong id="stat-users">—</strong><small>Tài khoản đã đăng ký</small></article>
+          <article><span>Sản phẩm</span><strong id="stat-products">—</strong><small>Đang hiển thị trong kho quản trị</small></article>
+          <article><span>Đơn hàng</span><strong id="stat-orders">—</strong><small>Đơn gần đây</small></article>
+          <article><span>Chờ xử lý</span><strong id="stat-pending">—</strong><small>Đơn cần được tiếp nhận</small></article>
         </section>
-        <section class="admin-panel" id="products-panel" hidden>
-          <div class="admin-section-heading"><div><p class="eyebrow">CATALOG</p><h2>Sản phẩm và danh mục</h2></div><button id="products-reload" class="secondary-button" type="button">Làm mới</button></div>
-          <form id="category-form" class="product-editor">
-            <input type="hidden" name="id">
-            <h3 id="category-form-title">Thêm danh mục</h3>
-            <div class="admin-form-grid">
-              <label>Tên danh mục<input name="name" required maxlength="100" placeholder="Đồng hồ thể thao"></label>
-              <label>Mô tả<input name="description" maxlength="500" placeholder="Các mẫu đồng hồ phục vụ luyện tập"></label>
-            </div>
-            <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu danh mục</button><button class="secondary-button" id="category-reset" type="button">Làm mới biểu mẫu</button><span id="category-message" role="status"></span></div>
-          </form>
-          <div id="admin-categories" class="admin-product-list"></div>
-          <form id="product-form" class="product-editor">
-            <input type="hidden" name="id">
-            <h3 id="product-form-title">Thêm sản phẩm</h3>
-            <div class="admin-form-grid">
-              <label>Tên sản phẩm<input name="name" required maxlength="180" placeholder="Xiaomi Watch S4"></label>
-              <label>Danh mục<select name="categoryId" required></select></label>
-              <label>Giá bán (VND)<input name="priceVnd" type="number" min="1" step="1" required></label>
-              <label>Giá niêm yết (VND)<input name="compareAtVnd" type="number" min="1" step="1"></label>
-              <label>Tồn kho<input name="stock" type="number" min="0" step="1" required></label>
-              <label>Ảnh (đường dẫn /assets/)<input name="imageUrl" value="/assets/watch-placeholder.svg" required></label>
-              <label class="wide-field">Mô tả ngắn<input name="shortDescription" maxlength="500"></label>
-              <label class="wide-field">Thông số dạng JSON<textarea name="specifications" rows="3">{"Màn hình":"AMOLED","GPS":"Có"}</textarea></label>
-            </div>
-            <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span></div>
-          </form>
-          <div id="admin-products" class="admin-product-list"></div>
-        </section>
+        <div class="admin-workspace">
+          <aside class="admin-sidebar">
+            <p class="sidebar-label">QUẢN LÝ</p>
+            <nav class="admin-tabs" aria-label="Quản trị">
+              <button class="active" data-panel="orders" type="button"><span class="nav-icon">▤</span>Đơn hàng</button>
+              <button data-panel="users" type="button"><span class="nav-icon">♙</span>Người dùng</button>
+              <button data-panel="products" type="button"><span class="nav-icon">◈</span>Sản phẩm</button>
+            </nav>
+            <div class="sidebar-note"><strong>Dữ liệu cục bộ</strong><span>Quản lý trong MySQL trên máy này.</span></div>
+          </aside>
+          <div class="admin-panels">
+            <section class="admin-panel" id="orders-panel">
+              <div class="admin-section-heading"><div><p class="eyebrow">ĐIỀU HÀNH</p><h2>Đơn hàng</h2><p class="panel-subtitle">Theo dõi thanh toán, giao hàng và ghi nhận blockchain.</p></div><button id="orders-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <div id="admin-orders" class="admin-order-list"></div>
+            </section>
+            <section class="admin-panel" id="users-panel" hidden>
+              <div class="admin-section-heading"><div><p class="eyebrow">KHÁCH HÀNG</p><h2>Người dùng</h2><p class="panel-subtitle">Tra cứu tài khoản và cập nhật thông tin liên hệ.</p></div><button id="users-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <label class="admin-search"><span>Tìm người dùng</span><input id="users-search" type="search" placeholder="Tên, tên đăng nhập, email hoặc số điện thoại"></label>
+              <div id="admin-users-message" class="table-message" role="status"></div>
+              <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Khách hàng</th><th>Liên hệ</th><th>Đơn hàng</th><th>Ngày tham gia</th><th></th></tr></thead><tbody id="admin-users"></tbody></table></div>
+            </section>
+            <section class="admin-panel" id="products-panel" hidden>
+              <div class="admin-section-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2>Sản phẩm</h2><p class="panel-subtitle">Cập nhật danh mục, giá bán, tồn kho và trạng thái hiển thị.</p></div><button id="products-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <form id="category-form" class="product-editor">
+                <input type="hidden" name="id">
+                <h3 id="category-form-title">Thêm danh mục</h3>
+                <div class="admin-form-grid">
+                  <label>Tên danh mục<input name="name" required maxlength="100" placeholder="Đồng hồ thể thao"></label>
+                  <label>Mô tả<input name="description" maxlength="500" placeholder="Các mẫu đồng hồ phục vụ luyện tập"></label>
+                </div>
+                <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu danh mục</button><button class="secondary-button" id="category-reset" type="button">Làm mới biểu mẫu</button><span id="category-message" role="status"></span></div>
+              </form>
+              <div id="admin-categories" class="admin-product-list"></div>
+              <form id="product-form" class="product-editor">
+                <input type="hidden" name="id">
+                <h3 id="product-form-title">Thêm sản phẩm</h3>
+                <div class="admin-form-grid">
+                  <label>Tên sản phẩm<input name="name" required maxlength="180" placeholder="Xiaomi Watch S4"></label>
+                  <label>Danh mục<select name="categoryId" required></select></label>
+                  <label>Giá bán (VND)<input name="priceVnd" type="number" min="1" step="1" required></label>
+                  <label>Giá niêm yết (VND)<input name="compareAtVnd" type="number" min="1" step="1"></label>
+                  <label>Tồn kho<input name="stock" type="number" min="0" step="1" required></label>
+                  <label>Ảnh (đường dẫn /assets/)<input name="imageUrl" value="/assets/watch-placeholder.svg" required></label>
+                  <label class="wide-field">Mô tả ngắn<input name="shortDescription" maxlength="500"></label>
+                  <label class="wide-field">Thông số dạng JSON<textarea name="specifications" rows="3">{"Màn hình":"AMOLED","GPS":"Có"}</textarea></label>
+                </div>
+                <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span></div>
+              </form>
+              <div id="admin-products" class="admin-product-list"></div>
+            </section>
+          </div>
+        </div>
       </div>
     </main>
+    <dialog class="admin-dialog" id="user-dialog" aria-labelledby="user-dialog-title">
+      <form id="user-form" class="user-editor">
+        <div class="dialog-heading"><div><p class="eyebrow">HỒ SƠ KHÁCH HÀNG</p><h2 id="user-dialog-title">Cập nhật người dùng</h2></div><button id="user-dialog-close" class="icon-close" type="button" aria-label="Đóng">×</button></div>
+        <input type="hidden" name="id">
+        <div class="admin-form-grid">
+          <label>Họ và tên<input name="fullName" required maxlength="120"></label>
+          <label>Tên đăng nhập<input name="username" disabled></label>
+          <label>Số điện thoại<input name="phone" type="tel" required maxlength="24"></label>
+          <label>Email<input name="email" type="email" required maxlength="190"></label>
+          <label class="wide-field">Địa chỉ<input name="address" maxlength="500"></label>
+        </div>
+        <p class="user-editor-note">Mật khẩu được bảo vệ và không hiển thị trong trang quản trị.</p>
+        <p id="user-form-message" class="form-message" role="status"></p>
+        <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu thay đổi</button><button class="secondary-button" id="user-cancel" type="button">Hủy</button></div>
+      </form>
+    </dialog>
     <footer class="site-footer"><a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a><p>Dữ liệu đơn hàng nằm trong MySQL cục bộ</p><span>Hardhat Local · Chain ID 31337</span></footer>
   </body>
 </html>

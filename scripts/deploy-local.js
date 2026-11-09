@@ -33,6 +33,9 @@ async function deploy() {
   const previous = await optionalJson(deploymentFile);
   const existingCode = previous ? await provider.getCode(previous.address) : "0x";
   if (previous?.artifactHash === artifactHash && previous.admin === admin && existingCode !== "0x") {
+    if (previous.chainId !== chainId) {
+      await writeFile(deploymentFile, JSON.stringify({ ...previous, chainId }, null, 2) + "\n");
+    }
     console.log(`OrderRegistry: ${previous.address} (đang dùng)\nAdmin ví: ${admin}`);
     return;
   }
@@ -41,7 +44,7 @@ async function deploy() {
   await contract.waitForDeployment();
   const address = await contract.getAddress();
   await mkdir(outputDir, { recursive: true });
-  await writeFile(deploymentFile, JSON.stringify({ address, abi, admin, artifactHash }, null, 2) + "\n");
+  await writeFile(deploymentFile, JSON.stringify({ address, abi, admin, artifactHash, chainId }, null, 2) + "\n");
   console.log(`OrderRegistry: ${address}\nAdmin ví: ${admin}`);
 }
 
