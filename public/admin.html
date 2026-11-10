@@ -37,11 +37,11 @@
               <button data-panel="users" type="button"><span class="nav-icon">♙</span>Người dùng</button>
               <button data-panel="products" type="button"><span class="nav-icon">◈</span>Sản phẩm</button>
             </nav>
-            <div class="sidebar-note"><strong>Dữ liệu cục bộ</strong><span>Quản lý trong MySQL trên máy này.</span></div>
+            <div class="sidebar-note"><strong>VẬN HÀNH CỬA HÀNG</strong><span>Quản lý danh mục, khách hàng và đơn hàng.</span></div>
           </aside>
           <div class="admin-panels">
             <section class="admin-panel" id="orders-panel">
-              <div class="admin-section-heading"><div><p class="eyebrow">ĐIỀU HÀNH</p><h2>Đơn hàng</h2><p class="panel-subtitle">Theo dõi thanh toán, giao hàng và ghi nhận blockchain.</p></div><button id="orders-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <div class="admin-section-heading"><div><p class="eyebrow">ĐIỀU HÀNH</p><h2>Đơn hàng</h2><p class="panel-subtitle">Theo dõi thanh toán, giao hàng và bằng chứng blockchain.</p></div><button id="orders-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
               <div id="admin-orders" class="admin-order-list"></div>
             </section>
             <section class="admin-panel" id="users-panel" hidden>
@@ -71,9 +71,11 @@
                   <label>Giá bán (VND)<input name="priceVnd" type="number" min="1" step="1" required></label>
                   <label>Giá niêm yết (VND)<input name="compareAtVnd" type="number" min="1" step="1"></label>
                   <label>Tồn kho<input name="stock" type="number" min="0" step="1" required></label>
-                  <label>Ảnh (đường dẫn /assets/)<input name="imageUrl" value="/assets/watch-placeholder.svg" required></label>
+                  <label>Ảnh sản phẩm<input name="imageUrl" value="/assets/watch-placeholder.svg" placeholder="/assets/xiaomi-watch-s4.jpg" required></label>
                   <label class="wide-field">Mô tả ngắn<input name="shortDescription" maxlength="500"></label>
-                  <label class="wide-field">Thông số dạng JSON<textarea name="specifications" rows="3">{"Màn hình":"AMOLED","GPS":"Có"}</textarea></label>
+                  <label class="wide-field">Thông số kỹ thuật<textarea name="specifications" rows="4">Màn hình: AMOLED 1,43 inch
+Định vị: GNSS tích hợp
+Thời lượng pin: Tối đa 15 ngày</textarea><small class="form-hint">Nhập mỗi thông số trên một dòng theo dạng “Tên thông số: Nội dung”.</small></label>
                 </div>
                 <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span></div>
               </form>
@@ -99,6 +101,6 @@
         <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu thay đổi</button><button class="secondary-button" id="user-cancel" type="button">Hủy</button></div>
       </form>
     </dialog>
-    <footer class="site-footer"><a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a><p>Dữ liệu đơn hàng nằm trong MySQL cục bộ</p><span>Hardhat Local · Chain ID 31337</span></footer>
+    <footer class="site-footer"><a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a><p>Điều hành MiTime</p><span>Quản lý cửa hàng</span></footer>
   </body>
 </html>

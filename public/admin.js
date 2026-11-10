@@ -42,6 +42,30 @@ function selectOption(select, value, label) {
   select.append(option);
 }
 
+function formatSpecifications(value) {
+  let specifications = value;
+  if (typeof specifications === "string") {
+    try { specifications = JSON.parse(specifications); } catch { specifications = {}; }
+  }
+  if (!specifications || typeof specifications !== "object" || Array.isArray(specifications)) return "";
+  return Object.entries(specifications)
+    .map(([name, detail]) => `${name}: ${Array.isArray(detail) ? detail.join(", ") : detail}`)
+    .join("\n");
+}
+
+function parseSpecifications(value) {
+  const specifications = {};
+  for (const line of value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    const separator = line.indexOf(":");
+    if (separator < 1 || !line.slice(separator + 1).trim()) {
+      throw new Error("Mỗi dòng thông số cần có dạng “Tên thông số: Nội dung”.");
+    }
+    specifications[line.slice(0, separator).trim()] = line.slice(separator + 1).trim();
+  }
+  if (!Object.keys(specifications).length) throw new Error("Vui lòng nhập ít nhất một thông số kỹ thuật.");
+  return specifications;
+}
+
 async function loadDeployment() {
   try {
     const response = await fetch("/deployment.json", { cache: "no-store" });
@@ -52,7 +76,7 @@ async function loadDeployment() {
       : `Hợp đồng đã triển khai · Admin: ${deployment.admin}`;
   } catch {
     deployment = null;
-    $("#wallet-status").textContent = "Chưa triển khai hợp đồng local. Hãy chạy npm run chain và npm run deploy:local.";
+    $("#wallet-status").textContent = "Tích hợp blockchain chưa sẵn sàng. Vui lòng thử lại sau.";
   }
 }
 
@@ -171,7 +195,7 @@ function renderOrder(order) {
   const heading = document.createElement("h3");
   heading.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
   const details = document.createElement("p");
-  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${order.paymentMethod === "cod" ? "Thanh toán khi nhận" : "VNPay sandbox"} · ${order.paymentStatus === "paid" ? "Đã thanh toán" : order.paymentStatus === "failed" ? "Thanh toán lỗi" : "Chưa thanh toán"}`;
+  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${order.paymentMethod === "cod" ? "Thanh toán khi nhận" : "VNPay (thử nghiệm)"} · ${order.paymentStatus === "paid" ? "Đã thanh toán" : order.paymentStatus === "failed" ? "Thanh toán lỗi" : "Chưa thanh toán"}`;
   description.append(heading, details);
   const current = document.createElement("span");
   current.className = "product-category";
@@ -236,8 +260,8 @@ function renderOrder(order) {
   const currentCode = orderStates.findIndex(([code]) => code === order.orderStatus) + 1;
   const recorded = Number(order.blockchainStatus) === currentCode;
   proofText.textContent = recorded
-    ? `Blockchain đã ghi trạng thái “${orderStates[currentCode - 1]?.[1]}”.`
-    : "Trạng thái đơn hiện tại chưa được ghi lên blockchain.";
+    ? `Đã ghi nhận trạng thái “${orderStates[currentCode - 1]?.[1]}” trên blockchain.`
+    : "Trạng thái đơn hiện tại chưa có bằng chứng blockchain.";
   const digest = document.createElement("small");
   digest.textContent = `Mã băm đơn: ${order.blockchainDigest}`;
   proof.append(proofText, digest);
@@ -265,7 +289,7 @@ function renderOrder(order) {
 async function connectWallet() {
   if (!window.ethereum) throw new Error("Chrome chưa thấy tiện ích MetaMask. Hãy mở MetaMask và tải lại trang này.");
   if (!deployment) await loadDeployment();
-  if (!deployment) throw new Error("Chưa có hợp đồng. Hãy chạy Hardhat local và lệnh deploy trước.");
+  if (!deployment) throw new Error("Tích hợp blockchain chưa sẵn sàng. Vui lòng kiểm tra cấu hình hệ thống.");
   const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
   walletAccount = accounts[0];
   if (walletAccount.toLowerCase() !== deployment.admin.toLowerCase()) {
@@ -284,10 +308,10 @@ async function connectWallet() {
     }
     chain = await window.ethereum.request({ method: "eth_chainId" });
   }
-  if (chain !== "0x7a69") throw new Error("Hãy chọn mạng LabChain Local (Chain ID 31337) trong MetaMask.");
+  if (chain !== "0x7a69") throw new Error("MetaMask chưa kết nối với mạng LabChain Local. Vui lòng kiểm tra mạng đang chọn.");
   const contractCode = await window.ethereum.request({ method: "eth_getCode", params: [deployment.address, "latest"] });
   if (!contractCode || contractCode === "0x") {
-    throw new Error("Không tìm thấy hợp đồng trên mạng LabChain Local. Mạng có thể vừa khởi động lại; hãy triển khai lại hợp đồng.");
+    throw new Error("Không tìm thấy hợp đồng trên mạng LabChain Local. Vui lòng kiểm tra cấu hình mạng.");
   }
   $("#wallet-status").textContent = `Đã kết nối ví admin ${walletAccount}`;
   return walletAccount;
@@ -297,12 +321,12 @@ async function waitForReceipt(txHash) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const receipt = await window.ethereum.request({ method: "eth_getTransactionReceipt", params: [txHash] });
     if (receipt) {
-      if (receipt.status !== "0x1") throw new Error("Giao dịch bị từ chối trên blockchain local.");
+      if (receipt.status !== "0x1") throw new Error("Giao dịch không được xác nhận trên blockchain.");
       return receipt;
     }
     await new Promise((resolve) => window.setTimeout(resolve, 1000));
   }
-  throw new Error("Chưa thấy giao dịch được xác nhận. Kiểm tra cửa sổ Hardhat local.");
+  throw new Error("Chưa nhận được xác nhận giao dịch. Vui lòng kiểm tra MetaMask và thử lại.");
 }
 
 async function anchorOrder(order, button) {
@@ -312,10 +336,10 @@ async function anchorOrder(order, button) {
     const status = orderStates.findIndex(([code]) => code === order.orderStatus) + 1;
     const data = `0x9e6378b6${order.blockchainKey.slice(2)}${order.blockchainDigest.slice(2)}${status.toString(16).padStart(64, "0")}`;
     const txHash = await window.ethereum.request({ method: "eth_sendTransaction", params: [{ from, to: deployment.address, data, value: "0x0" }] });
-    announce("Đã gửi giao dịch. Chờ MetaMask/Hardhat xác nhận…");
+    announce("Đã gửi yêu cầu. Vui lòng xác nhận giao dịch trong MetaMask…");
     await waitForReceipt(txHash);
     await api(`/api/admin/orders/${order.id}/anchor`, { method: "POST", body: JSON.stringify({ txHash }) });
-    announce(`Đã ghi nhận đơn ${order.orderCode} lên blockchain local. Mã giao dịch: ${txHash}`);
+    announce(`Đã ghi nhận bằng chứng blockchain cho đơn ${order.orderCode}. Mã giao dịch: ${txHash}`);
     await loadOrders();
   } catch (error) {
     announce(vietnameseError(error, "Chưa ghi được giao dịch blockchain."), true);
@@ -379,9 +403,9 @@ function populateProductForm(product) {
   form.elements.stock.value = product?.stock ?? "";
   form.elements.imageUrl.value = product?.imageUrl ?? "/assets/watch-placeholder.svg";
   form.elements.shortDescription.value = product?.shortDescription ?? "";
-  const specifications = typeof product?.specifications === "string"
-    ? product.specifications : JSON.stringify(product?.specifications ?? { "Màn hình": "AMOLED", GPS: "Có" }, null, 2);
-  form.elements.specifications.value = specifications;
+  form.elements.specifications.value = formatSpecifications(
+    product?.specifications ?? { "Màn hình": "AMOLED", "Định vị": "GNSS tích hợp" },
+  );
   $("#product-form-title").textContent = product ? `Sửa sản phẩm #${product.id}` : "Thêm sản phẩm";
   $("#product-message").textContent = "";
 }
@@ -464,7 +488,7 @@ document.querySelectorAll("[data-panel]").forEach((button) => {
 });
 
 $("#wallet-connect").addEventListener("click", async () => {
-  try { await connectWallet(); announce("Đã kết nối ví admin với mạng LabChain Local."); }
+  try { await connectWallet(); announce("Đã kết nối ví quản trị với mạng blockchain."); }
   catch (error) { announce(vietnameseError(error, "Chưa kết nối được MetaMask."), true); }
 });
 $("#orders-reload").addEventListener("click", loadOrders);
@@ -520,6 +544,12 @@ $("#product-form").addEventListener("submit", async (event) => {
   const id = form.elements.id.value;
   const body = Object.fromEntries(new FormData(form).entries());
   delete body.id;
+  try {
+    body.specifications = parseSpecifications(body.specifications);
+  } catch (error) {
+    $("#product-message").textContent = error.message;
+    return;
+  }
   try {
     const result = await api(id ? `/api/admin/products/${id}` : "/api/admin/products", {
       method: id ? "PATCH" : "POST", body: JSON.stringify(body),

@@ -1,14 +1,8 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
 
-const demoProducts = [
-  { id: 1, name: "Xiaomi Watch S4", slug: "xiaomi-watch-s4", shortDescription: "AMOLED 1,43 inch · GNSS tích hợp · Pin tới 15 ngày", priceVnd: 3990000, compareAtVnd: 4490000, stock: 12, imageUrl: "/assets/xiaomi-watch-s4.jpg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px, tối đa 1500 nit HBM", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "486 mAh, tới 15 ngày, 5ATM" } },
-  { id: 2, name: "Xiaomi Watch 2", slug: "xiaomi-watch-2", shortDescription: "Wear OS by Google · Snapdragon W5+ Gen 1 · Pin tới 65 giờ", priceVnd: 4490000, compareAtVnd: 4990000, stock: 8, imageUrl: "/assets/xiaomi-watch-2.jpg", categoryName: "Đồng hồ Xiaomi", categorySlug: "dong-ho-xiaomi", specifications: { "Màn hình": "AMOLED 1,43 inch, 466 × 466 px", "Nền tảng": "Snapdragon W5+ Gen 1, Wear OS by Google", "Pin và kháng nước": "495 mAh, tới 65 giờ, 5ATM" } },
-  { id: 3, name: "Redmi Watch 5", slug: "redmi-watch-5", shortDescription: "AMOLED 2,07 inch · GNSS tích hợp · Pin tới 24 ngày", priceVnd: 1790000, compareAtVnd: 1990000, stock: 20, imageUrl: "/assets/redmi-watch-5.jpg", categoryName: "Đồng hồ Redmi", categorySlug: "dong-ho-redmi", specifications: { "Màn hình": "AMOLED 2,07 inch, 432 × 514 px, tối đa 1500 nit", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "550 mAh, tới 24 ngày, 5ATM" } },
-  { id: 4, name: "Xiaomi Smart Band 9 Pro", slug: "xiaomi-smart-band-9-pro", shortDescription: "AMOLED 1,74 inch · GNSS tích hợp · Pin tới 21 ngày", priceVnd: 1590000, compareAtVnd: 1890000, stock: 18, imageUrl: "/assets/smart-band-9-pro.png", categoryName: "Vòng đeo thông minh", categorySlug: "vong-deo-thong-minh", specifications: { "Màn hình": "AMOLED 1,74 inch, 336 × 480 px", "Định vị": "GNSS 5 hệ thống", "Pin và kháng nước": "Tới 21 ngày, 5ATM" } },
-];
-
 const state = {
   products: [],
+  catalogFailed: false,
   category: "all",
   search: "",
   sort: "featured",
@@ -103,7 +97,13 @@ function filteredProducts() {
 function renderProducts() {
   const products = filteredProducts();
   grid.replaceChildren();
-  $("#empty-products").hidden = products.length > 0;
+  const emptyState = $("#empty-products");
+  emptyState.textContent = state.catalogFailed
+    ? "Danh mục sản phẩm hiện chưa tải được. Vui lòng thử lại sau."
+    : state.products.length === 0
+      ? "Hiện chưa có sản phẩm trong danh mục này."
+      : "Không tìm thấy sản phẩm phù hợp. Hãy thay đổi từ khóa hoặc bộ lọc.";
+  emptyState.hidden = products.length > 0;
   for (const product of products) {
     const card = document.createElement("article");
     card.className = "product-card";
@@ -112,17 +112,12 @@ function renderProducts() {
     visual.className = "product-visual";
     const label = document.createElement("span");
     label.className = "product-label";
-    label.textContent = product.stock > 0 ? "ĐANG ĐƯỢC QUAN TÂM" : "TẠM HẾT HÀNG";
-    const favorite = document.createElement("button");
-    favorite.className = "favorite-button";
-    favorite.type = "button";
-    favorite.setAttribute("aria-label", "Đánh dấu yêu thích");
-    favorite.textContent = "♡";
+    label.textContent = product.stock > 0 ? "CÒN HÀNG" : "TẠM HẾT HÀNG";
     const image = document.createElement("img");
     image.src = productImage(product);
     image.alt = "Ảnh sản phẩm " + product.name;
     image.loading = "lazy";
-    visual.append(label, favorite, image);
+    visual.append(label, image);
 
     const info = document.createElement("div");
     info.className = "product-info";
@@ -304,14 +299,17 @@ async function loadUser() {
 }
 
 async function loadProducts() {
+  const notice = $("#service-notice");
   try {
     const { products } = await api("/api/products");
     state.products = products;
-    $("#service-notice").hidden = true;
+    state.catalogFailed = false;
+    notice.hidden = true;
   } catch {
-    state.products = demoProducts;
-    $("#service-notice").textContent = "Đang hiển thị sản phẩm minh họa. Hãy bật MySQL và nhập các tệp schema/seed để tải dữ liệu thật từ cơ sở dữ liệu.";
-    $("#service-notice").hidden = false;
+    state.products = [];
+    state.catalogFailed = true;
+    $("#service-notice-text").textContent = "Danh mục sản phẩm tạm thời chưa khả dụng.";
+    notice.hidden = false;
   }
   renderCategories();
   renderProducts();
@@ -346,11 +344,11 @@ async function loadOrders() {
       if (items.childElementCount) card.append(items);
       if (order.blockchainTxHash) {
         const proof = document.createElement("small");
-        proof.textContent = `Đã ghi nhận trên LabChain Local · ${order.blockchainTxHash.slice(0, 14)}…`;
+        proof.textContent = `Bằng chứng blockchain đã được ghi nhận · ${order.blockchainTxHash.slice(0, 14)}…`;
         card.append(proof);
       } else {
         const proof = document.createElement("small");
-        proof.textContent = "Đơn đang chờ admin ghi dấu lên blockchain local.";
+        proof.textContent = "Đơn hàng đang chờ ghi nhận bằng chứng blockchain.";
         card.append(proof);
       }
       target.append(card);
@@ -370,11 +368,11 @@ async function loadPaymentOptions() {
     option.disabled = !configured;
     if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
     note.textContent = configured
-      ? "Sandbox đã sẵn sàng; đây là giao dịch mô phỏng, không thu tiền thật."
-      : "VNPay sandbox sẽ bật sau khi cấu hình TmnCode và HashSecret trong .env.";
+      ? "Giao dịch được xử lý trong môi trường thử nghiệm, không phát sinh khoản thu thực."
+      : "Thanh toán VNPay hiện chưa khả dụng. Bạn có thể chọn thanh toán khi nhận hàng.";
   } catch {
     option.disabled = true;
-    note.textContent = "Chưa kết nối được máy chủ để kiểm tra VNPay sandbox.";
+    note.textContent = "Không thể kiểm tra VNPay lúc này. Vui lòng chọn thanh toán khi nhận hàng.";
   }
 }
 
@@ -441,6 +439,8 @@ $("#search-input").addEventListener("input", (event) => {
   state.search = event.target.value.trim();
   renderProducts();
 });
+
+$("#products-retry").addEventListener("click", loadProducts);
 
 $("#sort-select").addEventListener("change", (event) => {
   state.sort = event.target.value;
@@ -537,8 +537,8 @@ loadPaymentOptions();
 const paymentResult = new URLSearchParams(window.location.search).get("payment");
 if (paymentResult) {
   const labels = {
-    success: "Thanh toán VNPay sandbox thành công.",
-    failed: "VNPay sandbox không hoàn tất thanh toán; đơn đã được hủy.",
+    success: "Giao dịch VNPay thử nghiệm đã hoàn tất.",
+    failed: "Giao dịch VNPay thử nghiệm chưa hoàn tất; đơn đã được hủy.",
     invalid: "Không xác minh được kết quả VNPay. Hãy kiểm tra lại đơn hàng.",
     error: "Chưa cập nhật được kết quả VNPay. Hãy mở lịch sử đơn hàng để kiểm tra.",
   };

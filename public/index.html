@@ -31,7 +31,7 @@
           <h1>Thời gian của bạn.<br><em>Phong cách của bạn.</em></h1>
           <p class="hero-description">Khám phá đồng hồ thông minh Xiaomi và Redmi — kết nối với sức khỏe, vận động và mọi khoảnh khắc mỗi ngày.</p>
           <a class="primary-button" href="#products">Khám phá sản phẩm <span aria-hidden="true">↗</span></a>
-          <div class="hero-note"><span class="note-line"></span> Dữ liệu giá và sản phẩm đang ở chế độ minh họa</div>
+          <div class="hero-note"><span class="note-line"></span> Đồng hồ thông minh cho nhịp sống mỗi ngày</div>
         </div>
         <div class="hero-art" aria-label="Đồng hồ thông minh Xiaomi" role="img">
           <div class="art-orbit orbit-one"></div>
@@ -39,14 +39,12 @@
           <div class="art-glow"></div>
           <img src="/assets/xiaomi-watch-s4.jpg" alt="Ảnh thật bộ sưu tập Xiaomi Watch S4" fetchpriority="high">
           <div class="art-tag"><span class="tag-dot"></span> SMART, EVERY DAY</div>
-          <div class="art-index">01 / 04</div>
         </div>
-        <div class="hero-bottom"><span>MI WATCH / REDMI WATCH</span><span>01 — 2026</span></div>
       </section>
 
       <section class="benefits" aria-label="Thông tin cửa hàng">
         <div><span class="benefit-icon">◇</span><p><strong>Chọn hàng dễ dàng</strong><small>Lọc theo dòng sản phẩm</small></p></div>
-        <div><span class="benefit-icon">⌂</span><p><strong>Giao hàng tận nơi</strong><small>Nhập địa chỉ khi đặt hàng</small></p></div>
+        <div><span class="benefit-icon">⌂</span><p><strong>Đặt hàng thuận tiện</strong><small>Thông tin nhận hàng được lưu cùng đơn</small></p></div>
         <div><span class="benefit-icon">↗</span><p><strong>Đơn hàng minh bạch</strong><small>Có thể đối chiếu mã blockchain</small></p></div>
       </section>
 
@@ -66,20 +64,23 @@
             </select>
           </div>
         </div>
-        <p class="service-notice" id="service-notice" role="status" hidden></p>
+        <div class="service-notice" id="service-notice" role="status" aria-live="polite" hidden>
+          <span id="service-notice-text"></span>
+          <button id="products-retry" class="secondary-button" type="button">Thử lại</button>
+        </div>
         <div class="product-grid" id="product-grid" aria-live="polite"></div>
-        <div class="empty-state" id="empty-products" hidden>Không tìm thấy mẫu phù hợp. Thử đổi từ khóa hoặc danh mục nhé.</div>
+        <div class="empty-state" id="empty-products" hidden>Không tìm thấy sản phẩm phù hợp. Hãy thay đổi từ khóa hoặc bộ lọc.</div>
       </section>
 
       <section class="story-banner">
-        <div><p class="eyebrow">MI WATCH / YOUR EVERYDAY</p><h2>Chạm vào nhịp<br>điệu của riêng bạn.</h2><p>Giao diện cửa hàng được thiết kế cho trải nghiệm mua sắm gọn gàng và dễ sử dụng.</p><a href="#products" class="text-link">Xem bộ sưu tập <span>→</span></a></div>
+        <div><p class="eyebrow">MI WATCH / YOUR EVERYDAY</p><h2>Chạm vào nhịp<br>điệu của riêng bạn.</h2><p>Theo dõi hoạt động, sức khỏe và kết nối với những tiện ích bạn cần mỗi ngày.</p><a href="#products" class="text-link">Xem bộ sưu tập <span>→</span></a></div>
         <div class="story-mark" aria-hidden="true"><span>MI</span><i>TIME</i></div>
       </section>
     </main>
 
     <footer class="site-footer">
       <a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
-      <p>Đồ án thương mại điện tử · Dữ liệu hiện tại là minh họa</p>
+      <p>Đồng hồ thông minh Xiaomi &amp; Redmi cho nhịp sống hiện đại.</p>
       <a href="/admin.html">Khu vực quản trị <span>↗</span></a>
     </footer>
 
@@ -88,7 +89,7 @@
       <div class="drawer-heading"><div><p class="eyebrow">GIỎ HÀNG CỦA BẠN</p><h2>Đã chọn <span id="drawer-count">0</span> món</h2></div><button class="close-button" id="cart-close" type="button" aria-label="Đóng giỏ hàng">×</button></div>
       <div class="cart-items" id="cart-items"></div>
       <div class="cart-empty" id="cart-empty">Giỏ hàng đang trống. Hãy chọn chiếc đồng hồ bạn thích.</div>
-      <div class="drawer-footer"><div class="subtotal"><span>Tạm tính</span><strong id="cart-total">0 ₫</strong></div><button class="primary-button checkout-button" id="checkout-open" type="button">Tiến hành đặt hàng <span>→</span></button><p>Thông tin giá là dữ liệu minh họa cho đồ án.</p></div>
+      <div class="drawer-footer"><div class="subtotal"><span>Tạm tính</span><strong id="cart-total">0 ₫</strong></div><button class="primary-button checkout-button" id="checkout-open" type="button">Tiến hành đặt hàng <span>→</span></button><p>Giá bán và tồn kho được xác nhận khi bạn đặt hàng.</p></div>
     </aside>
 
     <section class="dialog" id="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title" hidden>
@@ -151,8 +152,8 @@
               </label>
               <label class="payment-choice">
                 <input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay">
-                <span class="payment-choice-copy"><strong>VNPay sandbox</strong><small>Giao dịch mô phỏng trong môi trường thử nghiệm</small></span>
-                <span class="payment-tag payment-tag-test">Dùng thử</span>
+                <span class="payment-choice-copy"><strong>VNPay</strong><small>Thanh toán thử nghiệm, không thu tiền thật</small></span>
+                <span class="payment-tag payment-tag-test">Sandbox</span>
               </label>
               <p class="payment-note" id="vnpay-availability" role="status"></p>
             </fieldset>

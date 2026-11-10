@@ -11,10 +11,10 @@ export function vietnameseError(error, fallback = vietnameseFallback) {
     return "Ví không đủ ETH thử nghiệm để trả phí giao dịch.";
   }
   if (/could not coalesce|internal json-rpc error|unknown rpc error/i.test(message)) {
-    return "MetaMask hoặc mạng blockchain cục bộ chưa xử lý được yêu cầu. Hãy kiểm tra mạng LabChain Local.";
+    return "MetaMask chưa xử lý được giao dịch. Vui lòng kiểm tra ví và mạng blockchain đang kết nối.";
   }
   if (/failed to fetch|networkerror|network request failed|load failed|econnrefused|connection refused|err_connection/i.test(message)) {
-    return "Không kết nối được máy chủ. Hãy kiểm tra máy chủ web và MySQL rồi thử lại.";
+    return "Không kết nối được hệ thống. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.";
   }
   if (/timeout|timed out|request took too long/i.test(message)) {
     return "Yêu cầu mất quá nhiều thời gian. Vui lòng thử lại.";
