@@ -45,7 +45,7 @@
       <section class="benefits" aria-label="Thông tin cửa hàng">
         <div><span class="benefit-icon">◇</span><p><strong>Chọn hàng dễ dàng</strong><small>Lọc theo dòng sản phẩm</small></p></div>
         <div><span class="benefit-icon">⌂</span><p><strong>Đặt hàng thuận tiện</strong><small>Thông tin nhận hàng được lưu cùng đơn</small></p></div>
-        <div><span class="benefit-icon">↗</span><p><strong>Đơn hàng minh bạch</strong><small>Có thể đối chiếu mã blockchain</small></p></div>
+        <div><span class="benefit-icon">↗</span><p><strong>Theo dõi đơn hàng</strong><small>Cập nhật trạng thái rõ ràng</small></p></div>
       </section>
 
       <section class="products-section" id="products">
@@ -81,7 +81,6 @@
     <footer class="site-footer">
       <a class="brand footer-brand" href="/"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
       <p>Đồng hồ thông minh Xiaomi &amp; Redmi cho nhịp sống hiện đại.</p>
-      <a href="/admin.html">Khu vực quản trị <span>↗</span></a>
     </footer>
 
     <div class="scrim" id="scrim" hidden></div>
@@ -94,25 +93,43 @@
 
     <section class="dialog" id="account-dialog" role="dialog" aria-modal="true" aria-labelledby="account-title" hidden>
       <div class="dialog-card"><button class="close-button dialog-close" type="button" aria-label="Đóng">×</button><p class="eyebrow">CHÀO MỪNG ĐẾN MITIME</p><h2 id="account-title">Tài khoản của bạn</h2>
-        <div class="dialog-tabs"><button type="button" class="tab-button active" data-auth-tab="login">Đăng nhập</button><button type="button" class="tab-button" data-auth-tab="register">Tạo tài khoản</button></div>
-        <form id="login-form" class="form-stack">
-          <label>Tên đăng nhập hoặc email<input name="username" required autocomplete="username"></label>
-          <label>Mật khẩu<input name="password" type="password" required autocomplete="current-password"></label>
-          <button class="primary-button" type="submit">Đăng nhập <span>→</span></button>
-        </form>
-        <form id="register-form" class="form-stack" hidden>
-          <label>Họ và tên<input name="fullName" required maxlength="120" autocomplete="name"></label>
-          <label>Số điện thoại<input name="phone" required maxlength="24" autocomplete="tel"></label>
-          <label>Email<input name="email" type="email" required maxlength="190" autocomplete="email"></label>
-          <label>Tên đăng nhập<input name="username" required minlength="4" maxlength="64" autocomplete="username"></label>
-          <label>Địa chỉ<input name="address" required maxlength="500" autocomplete="street-address"></label>
-          <label>Mật khẩu<input name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
-          <button class="primary-button" type="submit">Tạo tài khoản <span>→</span></button>
-        </form>
-        <section class="account-orders" id="account-orders" hidden>
-          <div class="account-orders-heading"><h3>Đơn hàng của tôi</h3><button class="text-link" id="orders-refresh" type="button">Làm mới</button></div>
-          <div id="customer-orders" class="customer-orders"></div>
-          <button class="secondary-button" id="logout-button" type="button">Đăng xuất</button>
+        <div id="account-auth">
+          <div class="dialog-tabs"><button type="button" class="tab-button active" data-auth-tab="login">Đăng nhập</button><button type="button" class="tab-button" data-auth-tab="register">Tạo tài khoản</button></div>
+          <form id="login-form" class="form-stack">
+            <label>Tên đăng nhập hoặc email<input name="username" required autocomplete="username"></label>
+            <label>Mật khẩu<input name="password" type="password" required autocomplete="current-password"></label>
+            <button class="primary-button" type="submit">Đăng nhập <span>→</span></button>
+          </form>
+          <form id="register-form" class="form-stack" hidden>
+            <label>Họ và tên<input name="fullName" required maxlength="120" autocomplete="name"></label>
+            <label>Số điện thoại<input name="phone" required maxlength="24" autocomplete="tel"></label>
+            <label>Email<input name="email" type="email" required maxlength="190" autocomplete="email"></label>
+            <label>Tên đăng nhập<input name="username" required minlength="4" maxlength="64" autocomplete="username"></label>
+            <label>Địa chỉ<input name="address" required maxlength="500" autocomplete="street-address"></label>
+            <label>Mật khẩu<input name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></label>
+            <button class="primary-button" type="submit">Tạo tài khoản <span>→</span></button>
+          </form>
+        </div>
+        <section class="account-dashboard" id="account-dashboard" hidden>
+          <nav class="account-menu" aria-label="Quản lý tài khoản">
+            <button class="active" type="button" data-account-view="orders">Đơn hàng của tôi</button>
+            <button type="button" data-account-view="profile">Thông tin tài khoản</button>
+            <button id="logout-button" type="button">Đăng xuất</button>
+          </nav>
+          <section class="account-orders" id="account-orders">
+            <div class="account-orders-heading"><h3>Đơn hàng của tôi</h3><button class="text-link" id="orders-refresh" type="button">Làm mới</button></div>
+            <div id="customer-orders" class="customer-orders"></div>
+          </section>
+          <section class="account-profile" id="account-profile" hidden>
+            <h3>Thông tin tài khoản</h3>
+            <dl class="profile-details">
+              <div><dt>Họ và tên</dt><dd id="profile-full-name"></dd></div>
+              <div><dt>Tên đăng nhập</dt><dd id="profile-username"></dd></div>
+              <div><dt>Số điện thoại</dt><dd id="profile-phone"></dd></div>
+              <div><dt>Email</dt><dd id="profile-email"></dd></div>
+              <div><dt>Địa chỉ</dt><dd id="profile-address"></dd></div>
+            </dl>
+          </section>
         </section>
         <p class="form-message" id="account-message" role="status"></p>
       </div>

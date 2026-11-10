@@ -278,15 +278,34 @@ function setUser(user) {
   const previousUserId = state.user?.id;
   state.user = user;
   $("#account-label").textContent = user ? user.fullName : "Đăng nhập";
-  $("#account-orders").hidden = !user;
-  $("#login-form").hidden = Boolean(user);
-  if (user) $("#register-form").hidden = true;
-  if (user) fillCheckoutFromProfile(previousUserId !== user.id);
+  $("#account-auth").hidden = Boolean(user);
+  $("#account-dashboard").hidden = !user;
+  if (user) {
+    $("#profile-full-name").textContent = user.fullName || "—";
+    $("#profile-username").textContent = user.username || "—";
+    $("#profile-phone").textContent = user.phone || "Chưa cập nhật";
+    $("#profile-email").textContent = user.email || "Chưa cập nhật";
+    $("#profile-address").textContent = user.address || "Chưa cập nhật";
+    showAccountView("orders");
+    fillCheckoutFromProfile(previousUserId !== user.id);
+  }
   else {
+    document.querySelector('[data-auth-tab="login"]').click();
+    $("#account-message").textContent = "";
     for (const field of ["shippingName", "shippingPhone", "shippingAddress"]) {
       $("#checkout-form").elements.namedItem(field).value = "";
     }
   }
+}
+
+function showAccountView(view) {
+  document.querySelectorAll("[data-account-view]").forEach((button) => {
+    const active = button.dataset.accountView === view;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  $("#account-orders").hidden = view !== "orders";
+  $("#account-profile").hidden = view !== "profile";
 }
 
 async function loadUser() {
@@ -332,7 +351,9 @@ async function loadOrders() {
       const title = document.createElement("strong");
       title.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
       const status = document.createElement("p");
-      status.textContent = `Đơn: ${orderLabels[order.orderStatus] || order.orderStatus} · Thanh toán: ${order.paymentStatus === "paid" ? "đã thanh toán" : order.paymentStatus === "failed" ? "thất bại" : "chưa thanh toán"}`;
+      const paymentLabels = { unpaid: "chưa thanh toán", paid: "đã thanh toán", failed: "thanh toán lỗi", refunded: "đã hoàn tiền" };
+      const methodLabel = order.paymentMethod === "vnpay" ? "VNPay" : "Thanh toán khi nhận hàng";
+      status.textContent = `Đơn: ${orderLabels[order.orderStatus] || order.orderStatus} · ${methodLabel} · ${paymentLabels[order.paymentStatus] || "chưa cập nhật"}`;
       card.append(title, status);
       const items = document.createElement("ul");
       items.className = "customer-order-items";
@@ -342,19 +363,76 @@ async function loadOrders() {
         items.append(line);
       }
       if (items.childElementCount) card.append(items);
-      if (order.blockchainTxHash) {
-        const proof = document.createElement("small");
-        proof.textContent = `Bằng chứng blockchain đã được ghi nhận · ${order.blockchainTxHash.slice(0, 14)}…`;
-        card.append(proof);
-      } else {
-        const proof = document.createElement("small");
-        proof.textContent = "Đơn hàng đang chờ ghi nhận bằng chứng blockchain.";
-        card.append(proof);
+
+      const actions = document.createElement("div");
+      actions.className = "customer-order-actions";
+      if (order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)
+          && order.orderStatus !== "cancelled") {
+        const retry = document.createElement("button");
+        retry.className = "order-action-primary";
+        retry.type = "button";
+        retry.textContent = "Thanh toán lại";
+        retry.addEventListener("click", () => retryVnpayPayment(order, retry));
+        actions.append(retry);
       }
+      if (["pending", "confirmed", "packing"].includes(order.orderStatus)
+          && !["paid", "refunded"].includes(order.paymentStatus)) {
+        const cancel = document.createElement("button");
+        cancel.className = "order-action-secondary";
+        cancel.type = "button";
+        cancel.textContent = "Hủy đơn";
+        cancel.addEventListener("click", () => cancelCustomerOrder(order, cancel));
+        actions.append(cancel);
+      } else if (["pending", "confirmed", "packing"].includes(order.orderStatus)
+          && ["paid", "refunded"].includes(order.paymentStatus)) {
+        const cancellationNote = document.createElement("small");
+        cancellationNote.className = "order-action-note";
+        cancellationNote.textContent = "Đơn đã thanh toán; không thể tự hủy trực tuyến.";
+        actions.append(cancellationNote);
+      } else if (order.orderStatus === "cancelled" && order.paymentStatus === "paid") {
+        const cancellationNote = document.createElement("small");
+        cancellationNote.className = "order-action-note";
+        cancellationNote.textContent = "Đơn đã hủy nhưng giao dịch được xác nhận sau đó. Vui lòng liên hệ cửa hàng để được hỗ trợ.";
+        actions.append(cancellationNote);
+      }
+      if (actions.childElementCount) card.append(actions);
       target.append(card);
     }
   } catch (error) {
     target.textContent = vietnameseError(error, "Chưa tải được đơn hàng. Vui lòng thử lại.");
+  }
+}
+
+async function retryVnpayPayment(order, button) {
+  button.disabled = true;
+  button.textContent = "Đang mở thanh toán…";
+  try {
+    const result = await api(`/api/orders/${order.id}/payments/vnpay/retry`, { method: "POST" });
+    if (!result.paymentUrl) throw new Error("Chưa tạo được liên kết thanh toán. Vui lòng thử lại.");
+    window.location.assign(result.paymentUrl);
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Thanh toán lại";
+    const message = $("#account-message");
+    message.classList.remove("success");
+    message.textContent = vietnameseError(error, "Chưa mở được VNPay. Vui lòng thử lại.");
+  }
+}
+
+async function cancelCustomerOrder(order, button) {
+  if (!window.confirm(`Bạn muốn hủy đơn ${order.orderCode}?`)) return;
+  button.disabled = true;
+  try {
+    await api(`/api/orders/${order.id}/cancel`, { method: "POST" });
+    const message = $("#account-message");
+    message.classList.add("success");
+    message.textContent = `Đơn ${order.orderCode} đã được hủy.`;
+    await loadOrders();
+  } catch (error) {
+    button.disabled = false;
+    const message = $("#account-message");
+    message.classList.remove("success");
+    message.textContent = vietnameseError(error, "Chưa hủy được đơn hàng. Vui lòng thử lại.");
   }
 }
 
@@ -378,6 +456,7 @@ async function loadPaymentOptions() {
 
 async function submitAuth(form, endpoint) {
   const message = $("#account-message");
+  message.classList.remove("success");
   message.textContent = "";
   const body = Object.fromEntries(new FormData(form).entries());
   try {
@@ -387,9 +466,11 @@ async function submitAuth(form, endpoint) {
       window.location.assign("/admin.html");
       return;
     }
-    closeDialog(accountDialog);
     form.reset();
+    showAccountView("orders");
+    await loadOrders();
   } catch (error) {
+    message.classList.remove("success");
     message.textContent = vietnameseError(error, "Chưa đăng nhập được. Vui lòng thử lại.");
   }
 }
@@ -409,11 +490,16 @@ $("#logout-button").addEventListener("click", async () => {
     setUser(null);
     closeDialog(accountDialog);
   } catch (error) {
+    $("#account-message").classList.remove("success");
     $("#account-message").textContent = vietnameseError(error, "Chưa đăng xuất được. Vui lòng thử lại.");
   }
 });
 
 $("#orders-refresh").addEventListener("click", loadOrders);
+
+document.querySelectorAll("[data-account-view]").forEach((button) => {
+  button.addEventListener("click", () => showAccountView(button.dataset.accountView));
+});
 
 document.querySelectorAll("[data-auth-tab]").forEach((button) => {
   button.addEventListener("click", () => {
@@ -503,13 +589,13 @@ $("#checkout-form").addEventListener("submit", async (event) => {
   };
   try {
     const result = await api("/api/orders", { method: "POST", body: JSON.stringify(body) });
+    state.cart = [];
+    saveCart();
+    renderCart();
     if (result.paymentUrl) {
       window.location.assign(result.paymentUrl);
       return;
     }
-    state.cart = [];
-    saveCart();
-    renderCart();
     message.textContent = "";
     closeDialog(checkoutDialog);
     window.alert("Đã tạo đơn " + result.order.orderCode + ". Bạn có thể xem trạng thái trong tài khoản.");
@@ -537,10 +623,10 @@ loadPaymentOptions();
 const paymentResult = new URLSearchParams(window.location.search).get("payment");
 if (paymentResult) {
   const labels = {
-    success: "Giao dịch VNPay thử nghiệm đã hoàn tất.",
-    failed: "Giao dịch VNPay thử nghiệm chưa hoàn tất; đơn đã được hủy.",
-    invalid: "Không xác minh được kết quả VNPay. Hãy kiểm tra lại đơn hàng.",
-    error: "Chưa cập nhật được kết quả VNPay. Hãy mở lịch sử đơn hàng để kiểm tra.",
+    success: "Thanh toán đã hoàn tất. Đơn hàng sẽ được cập nhật trong lịch sử.",
+    failed: "Thanh toán chưa hoàn tất. Bạn có thể thử lại trong mục Đơn hàng của tôi.",
+    invalid: "Chưa xác minh được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng.",
+    error: "Chưa cập nhật được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng hoặc thử thanh toán lại.",
   };
   if (labels[paymentResult]) window.setTimeout(() => window.alert(labels[paymentResult]), 100);
   window.history.replaceState({}, "", "/");

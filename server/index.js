@@ -87,6 +87,10 @@ function makeOrderCode() {
   return `MW${date}${randomBytes(4).toString("hex").toUpperCase()}`;
 }
 
+function makeVnpayReference(orderCode) {
+  return `${orderCode}${randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
 function productSlug(value) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "d")
     .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 190);
@@ -100,14 +104,16 @@ function parseVnpayRequest(request) {
 }
 
 async function applyVnpayResult(search) {
-  const orderCode = cleanText(search.get("vnp_TxnRef"), 32);
+  const transactionRef = cleanText(search.get("vnp_TxnRef"), 32);
   const [rows] = await pool.execute(
-    "SELECT id, total_vnd AS totalVnd, payment_method AS paymentMethod FROM orders WHERE order_code = ? LIMIT 1",
-    [orderCode],
+    `SELECT o.id, o.order_code AS orderCode, o.total_vnd AS totalVnd, o.payment_method AS paymentMethod
+     FROM payment_attempts pa JOIN orders o ON o.id = pa.order_id
+     WHERE pa.transaction_ref = ? AND pa.provider = 'vnpay' LIMIT 1`,
+    [transactionRef],
   );
   const order = rows[0];
   if (!order || order.paymentMethod !== "vnpay") return { found: false };
-  if (Number(search.get("vnp_Amount")) !== Number(order.totalVnd) * 100) return { found: true, invalidAmount: true };
+  if (Number(search.get("vnp_Amount")) !== Number(order.totalVnd) * 100) return { found: true, invalidAmount: true, orderCode: order.orderCode };
 
   const success = search.get("vnp_ResponseCode") === "00" && search.get("vnp_TransactionStatus") === "00";
   const connection = await pool.getConnection();
@@ -121,41 +127,29 @@ async function applyVnpayResult(search) {
       if (success) {
         await connection.execute(
           "UPDATE payment_attempts SET response_code = '00', secure_hash_valid = TRUE WHERE transaction_ref = ?",
-          [orderCode],
+          [transactionRef],
         );
       }
       await connection.commit();
-      return { found: true, alreadyPaid: true, success: true };
+      return { found: true, alreadyPaid: true, success: true, orderCode: order.orderCode };
     }
-    if (status === "failed" || status === "refunded") {
+    if (status === "refunded") {
       await connection.commit();
-      return { found: true, success: false, terminal: true };
+      return { found: true, success: false, terminal: true, orderCode: order.orderCode };
     }
     if (success) {
       await connection.execute(
         "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE id = ?", [order.id],
       );
     } else {
-      await connection.execute(
-        "UPDATE orders SET payment_status = 'failed', order_status = 'cancelled' WHERE id = ?", [order.id],
-      );
-      if (lockedRows[0]?.orderStatus !== "cancelled") {
-        const [items] = await connection.execute(
-          "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [order.id],
-        );
-        for (const item of items) {
-          if (item.productId != null) {
-            await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
-          }
-        }
-      }
+      await connection.execute("UPDATE orders SET payment_status = 'failed' WHERE id = ?", [order.id]);
     }
     await connection.execute(
       "UPDATE payment_attempts SET response_code = ?, secure_hash_valid = TRUE WHERE transaction_ref = ?",
-      [search.get("vnp_ResponseCode"), orderCode],
+      [search.get("vnp_ResponseCode"), transactionRef],
     );
     await connection.commit();
-    return { found: true, success };
+    return { found: true, success, orderCode: order.orderCode };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -278,7 +272,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
     return response.status(400).json({ error: "Kiểm tra thông tin nhận hàng, cách thanh toán và sản phẩm trong giỏ." });
   }
   if (paymentMethod === "vnpay" && !hasVnpayCredentials()) {
-    return response.status(503).json({ error: "Muốn dùng VNPay sandbox cần điền TmnCode và HashSecret do VNPay cấp trong tệp .env. Bạn vẫn có thể đặt đơn bằng COD." });
+    return response.status(503).json({ error: "Thanh toán VNPay hiện chưa khả dụng. Bạn vẫn có thể chọn thanh toán khi nhận hàng." });
   }
   const quantities = new Map();
   for (const item of requested) {
@@ -311,6 +305,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
       await connection.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [quantity, product.id]);
     }
     const orderCode = makeOrderCode();
+    const transactionRef = paymentMethod === "vnpay" ? makeVnpayReference(orderCode) : null;
     const createdAt = new Date();
     if (paymentMethod === "vnpay" && subtotal < 5000) {
       throw Object.assign(new Error("VNPay sandbox yêu cầu thanh toán tối thiểu 5.000 ₫."), { status: 400 });
@@ -341,13 +336,13 @@ app.post("/api/orders", requireUser, async (request, response) => {
     if (paymentMethod === "vnpay") {
       await connection.execute(
         "INSERT INTO payment_attempts (order_id, provider, transaction_ref) VALUES (?, 'vnpay', ?)",
-        [insert.insertId, orderCode],
+        [insert.insertId, transactionRef],
       );
-      paymentUrl = createVnpayUrl({ orderCode, amountVnd: subtotal, clientIp: request.ip || "127.0.0.1" });
+      paymentUrl = createVnpayUrl({ orderCode: transactionRef, amountVnd: subtotal, clientIp: request.ip || "127.0.0.1" });
     }
     await connection.commit();
     response.status(201).json({
-      order: { id: insert.insertId, orderCode, totalVnd: subtotal, paymentMethod, paymentStatus: "unpaid", orderStatus: "pending", blockchainKey: orderKey, blockchainDigest: orderDigest },
+      order: { id: insert.insertId, orderCode, totalVnd: subtotal, paymentMethod, paymentStatus: "unpaid", orderStatus: "pending" },
       paymentUrl,
     });
   } catch (error) {
@@ -358,12 +353,107 @@ app.post("/api/orders", requireUser, async (request, response) => {
   }
 });
 
+app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, response) => {
+  if (!hasVnpayCredentials()) {
+    return response.status(503).json({ error: "Thanh toán VNPay hiện chưa khả dụng. Vui lòng chọn thanh toán khi nhận hàng." });
+  }
+  const id = Number(request.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Đơn hàng không hợp lệ." });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
+        payment_status AS paymentStatus, order_status AS orderStatus
+       FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
+    );
+    const order = rows[0];
+    if (!order) {
+      await connection.rollback();
+      return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
+    }
+    if (order.paymentMethod !== "vnpay") {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng này không sử dụng VNPay." });
+    }
+    if (!["unpaid", "failed"].includes(order.paymentStatus)
+        || ["cancelled", "shipped", "delivered"].includes(order.orderStatus)) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng hiện không thể thanh toán lại." });
+    }
+    const transactionRef = makeVnpayReference(order.orderCode);
+    const paymentUrl = createVnpayUrl({ orderCode: transactionRef, amountVnd: order.totalVnd, clientIp: request.ip || "127.0.0.1" });
+    await connection.execute(
+      "INSERT INTO payment_attempts (order_id, provider, transaction_ref) VALUES (?, 'vnpay', ?)", [id, transactionRef],
+    );
+    if (order.paymentStatus === "failed") {
+      await connection.execute("UPDATE orders SET payment_status = 'unpaid' WHERE id = ?", [id]);
+    }
+    await connection.commit();
+    response.json({ paymentUrl });
+  } catch (error) {
+    await connection.rollback();
+    response.status(error.status ?? 503).json({ error: error.status ? error.message : "Chưa tạo được liên kết thanh toán. Vui lòng thử lại." });
+  } finally {
+    connection.release();
+  }
+});
+
+app.post("/api/orders/:id/cancel", requireUser, async (request, response) => {
+  const id = Number(request.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Đơn hàng không hợp lệ." });
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT order_status AS orderStatus, payment_status AS paymentStatus
+       FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
+    );
+    const order = rows[0];
+    if (!order) {
+      await connection.rollback();
+      return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
+    }
+    if (order.orderStatus === "cancelled") {
+      await connection.commit();
+      return response.json({ ok: true });
+    }
+    if (["shipped", "delivered"].includes(order.orderStatus)) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể hủy." });
+    }
+    if (!["pending", "confirmed", "packing"].includes(order.orderStatus)) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng hiện không thể hủy." });
+    }
+    if (["paid", "refunded"].includes(order.paymentStatus)) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng đã thanh toán. Vui lòng liên hệ cửa hàng để được hỗ trợ hủy và hoàn tiền." });
+    }
+    const [items] = await connection.execute(
+      "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [id],
+    );
+    for (const item of items) {
+      if (item.productId != null) {
+        await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
+      }
+    }
+    await connection.execute("UPDATE orders SET order_status = 'cancelled' WHERE id = ?", [id]);
+    await connection.commit();
+    response.json({ ok: true });
+  } catch {
+    await connection.rollback();
+    response.status(503).json({ error: "Chưa hủy được đơn hàng. Vui lòng thử lại." });
+  } finally {
+    connection.release();
+  }
+});
+
 app.get("/api/orders", requireUser, async (request, response) => {
   try {
     const [orders] = await pool.execute(
       `SELECT id, order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
-        payment_status AS paymentStatus, order_status AS orderStatus, blockchain_digest AS blockchainDigest,
-        blockchain_tx_hash AS blockchainTxHash, blockchain_status AS blockchainStatus, created_at AS createdAt
+        payment_status AS paymentStatus, order_status AS orderStatus, created_at AS createdAt
        FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`, [request.session.user.id],
     );
     response.json({ orders: await attachOrderItems(orders) });
@@ -391,14 +481,14 @@ async function attachOrderItems(orders) {
 
 app.get("/api/payments/vnpay/return", async (request, response) => {
   const { search, valid } = parseVnpayRequest(request);
-  const orderCode = cleanText(search.get("vnp_TxnRef"), 32);
-  if (!valid) return response.redirect(`/?payment=invalid&order=${encodeURIComponent(orderCode)}`);
+  const transactionRef = cleanText(search.get("vnp_TxnRef"), 32);
+  if (!valid) return response.redirect(`/?payment=invalid&order=${encodeURIComponent(transactionRef)}`);
   try {
     const result = await applyVnpayResult(search);
     const state = !result.found || result.invalidAmount ? "invalid" : result.success ? "success" : "failed";
-    response.redirect(`/?payment=${state}&order=${encodeURIComponent(orderCode)}`);
+    response.redirect(`/?payment=${state}&order=${encodeURIComponent(result.orderCode || transactionRef)}`);
   } catch {
-    response.redirect(`/?payment=error&order=${encodeURIComponent(orderCode)}`);
+    response.redirect(`/?payment=error&order=${encodeURIComponent(transactionRef)}`);
   }
 });
 

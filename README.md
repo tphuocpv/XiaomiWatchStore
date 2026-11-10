@@ -4,7 +4,8 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 
 ## Tính năng
 
-- Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng và theo dõi đơn.
+- Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng, theo dõi đơn và hủy đơn chưa thanh toán trước khi giao hàng.
+- Khách hàng có thể tiếp tục thanh toán VNPay nếu giao dịch chưa hoàn tất.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
 - MetaMask xác nhận giao dịch ghi bằng chứng đơn hàng lên blockchain.
 - Máy chủ kiểm tra giá và tồn kho trước khi tạo đơn; hệ thống không lưu thông tin thẻ.
