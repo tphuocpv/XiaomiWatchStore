@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS orders (
   shipping_phone VARCHAR(24) NOT NULL,
   shipping_address VARCHAR(500) NOT NULL,
   customer_note VARCHAR(500) NULL,
+  cancellation_requested_at TIMESTAMP NULL DEFAULT NULL,
   blockchain_key CHAR(66) NULL,
   blockchain_digest CHAR(66) NULL,
   blockchain_tx_hash CHAR(66) NULL,

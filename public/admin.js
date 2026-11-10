@@ -195,7 +195,8 @@ function renderOrder(order) {
   const heading = document.createElement("h3");
   heading.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
   const details = document.createElement("p");
-  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${order.paymentMethod === "cod" ? "Thanh toán khi nhận" : "VNPay (thử nghiệm)"} · ${order.paymentStatus === "paid" ? "Đã thanh toán" : order.paymentStatus === "failed" ? "Thanh toán lỗi" : "Chưa thanh toán"}`;
+  const paymentLabels = { unpaid: "Chưa thanh toán", paid: "Đã thanh toán", failed: "Thanh toán lỗi", refunded: "Đã hoàn tiền" };
+  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${order.paymentMethod === "cod" ? "Thanh toán khi nhận" : "VNPay (thử nghiệm)"} · ${paymentLabels[order.paymentStatus] || "Chưa cập nhật"}`;
   description.append(heading, details);
   const current = document.createElement("span");
   current.className = "product-category";
@@ -216,6 +217,7 @@ function renderOrder(order) {
 
   const controls = document.createElement("div");
   controls.className = "order-controls";
+  let cancellationPanel = null;
   const status = document.createElement("select");
   status.setAttribute("aria-label", `Trạng thái đơn ${order.orderCode}`);
   const vnpayUnpaid = order.paymentMethod === "vnpay" && order.paymentStatus !== "paid";
@@ -231,6 +233,8 @@ function renderOrder(order) {
   saveStatus.type = "button";
   saveStatus.className = "secondary-button";
   saveStatus.textContent = "Cập nhật đơn";
+  status.disabled = Boolean(order.cancellationRequestedAt);
+  saveStatus.disabled = Boolean(order.cancellationRequestedAt);
   saveStatus.addEventListener("click", async () => {
     try {
       await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
@@ -239,6 +243,29 @@ function renderOrder(order) {
     } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được đơn hàng."), true); }
   });
   controls.append(status, saveStatus);
+  if (order.cancellationRequestedAt) {
+    const cancellation = document.createElement("section");
+    cancellationPanel = cancellation;
+    cancellation.className = "order-cancellation-request";
+    const cancellationTitle = document.createElement("strong");
+    cancellationTitle.textContent = "Khách hàng đã gửi yêu cầu hủy đơn";
+    const cancellationDate = document.createElement("small");
+    cancellationDate.textContent = `Gửi lúc ${new Date(order.cancellationRequestedAt).toLocaleString("vi-VN")}`;
+    const cancellationActions = document.createElement("div");
+    cancellationActions.className = "order-cancellation-actions";
+    const approve = document.createElement("button");
+    approve.type = "button";
+    approve.className = "secondary-button";
+    approve.textContent = order.paymentStatus === "paid" ? "Xác nhận hoàn tiền và hủy" : "Duyệt hủy đơn";
+    approve.addEventListener("click", () => resolveCancellationRequest(order, "approve", approve));
+    const decline = document.createElement("button");
+    decline.type = "button";
+    decline.className = "secondary-button";
+    decline.textContent = "Từ chối yêu cầu";
+    decline.addEventListener("click", () => resolveCancellationRequest(order, "decline", decline));
+    cancellationActions.append(approve, decline);
+    cancellation.append(cancellationTitle, cancellationDate, cancellationActions);
+  }
   if (order.paymentMethod === "cod" && order.paymentStatus !== "paid" && order.orderStatus === "delivered") {
     const paid = document.createElement("button");
     paid.type = "button";
@@ -282,8 +309,31 @@ function renderOrder(order) {
 
   card.append(top, address);
   if (items.childElementCount) card.append(items);
+  if (cancellationPanel) card.append(cancellationPanel);
   card.append(controls, proof);
   return card;
+}
+
+async function resolveCancellationRequest(order, action, button) {
+  if (action === "approve") {
+    const paid = order.paymentStatus === "paid";
+    const prompt = paid
+      ? "Chỉ tiếp tục sau khi đã xử lý hoàn tiền. Hệ thống sẽ ghi nhận đơn là đã hoàn tiền và hủy đơn. Tiếp tục?"
+      : "Duyệt yêu cầu hủy và trả sản phẩm về tồn kho?";
+    if (!window.confirm(prompt)) return;
+  }
+  button.disabled = true;
+  try {
+    await api(`/api/admin/orders/${order.id}/cancellation-request`, {
+      method: "POST",
+      body: JSON.stringify({ action, refundConfirmed: action === "approve" && order.paymentStatus === "paid" }),
+    });
+    announce(action === "approve" ? `Đã xử lý yêu cầu hủy đơn ${order.orderCode}.` : `Đã từ chối yêu cầu hủy đơn ${order.orderCode}.`);
+    await loadOrders();
+  } catch (error) {
+    button.disabled = false;
+    announce(vietnameseError(error, "Chưa xử lý được yêu cầu hủy đơn."), true);
+  }
 }
 
 async function connectWallet() {

@@ -364,7 +364,8 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
     await connection.beginTransaction();
     const [rows] = await connection.execute(
       `SELECT order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
-        payment_status AS paymentStatus, order_status AS orderStatus
+        payment_status AS paymentStatus, order_status AS orderStatus,
+        cancellation_requested_at AS cancellationRequestedAt
        FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
     );
     const order = rows[0];
@@ -377,7 +378,8 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
       return response.status(409).json({ error: "Đơn hàng này không sử dụng VNPay." });
     }
     if (!["unpaid", "failed"].includes(order.paymentStatus)
-        || ["cancelled", "shipped", "delivered"].includes(order.orderStatus)) {
+        || ["cancelled", "shipped", "delivered"].includes(order.orderStatus)
+        || order.cancellationRequestedAt) {
       await connection.rollback();
       return response.status(409).json({ error: "Đơn hàng hiện không thể thanh toán lại." });
     }
@@ -399,14 +401,14 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
   }
 });
 
-app.post("/api/orders/:id/cancel", requireUser, async (request, response) => {
+app.post("/api/orders/:id/cancellation-request", requireUser, async (request, response) => {
   const id = Number(request.params.id);
   if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Đơn hàng không hợp lệ." });
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT order_status AS orderStatus, payment_status AS paymentStatus
+      `SELECT order_status AS orderStatus, cancellation_requested_at AS cancellationRequestedAt
        FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
     );
     const order = rows[0];
@@ -414,36 +416,18 @@ app.post("/api/orders/:id/cancel", requireUser, async (request, response) => {
       await connection.rollback();
       return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
     }
-    if (order.orderStatus === "cancelled") {
-      await connection.commit();
-      return response.json({ ok: true });
-    }
-    if (["shipped", "delivered"].includes(order.orderStatus)) {
-      await connection.rollback();
-      return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể hủy." });
-    }
     if (!["pending", "confirmed", "packing"].includes(order.orderStatus)) {
       await connection.rollback();
-      return response.status(409).json({ error: "Đơn hàng hiện không thể hủy." });
+      return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể gửi yêu cầu hủy." });
     }
-    if (["paid", "refunded"].includes(order.paymentStatus)) {
-      await connection.rollback();
-      return response.status(409).json({ error: "Đơn hàng đã thanh toán. Vui lòng liên hệ cửa hàng để được hỗ trợ hủy và hoàn tiền." });
+    if (!order.cancellationRequestedAt) {
+      await connection.execute("UPDATE orders SET cancellation_requested_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
     }
-    const [items] = await connection.execute(
-      "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [id],
-    );
-    for (const item of items) {
-      if (item.productId != null) {
-        await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
-      }
-    }
-    await connection.execute("UPDATE orders SET order_status = 'cancelled' WHERE id = ?", [id]);
     await connection.commit();
     response.json({ ok: true });
   } catch {
     await connection.rollback();
-    response.status(503).json({ error: "Chưa hủy được đơn hàng. Vui lòng thử lại." });
+    response.status(503).json({ error: "Chưa gửi được yêu cầu hủy. Vui lòng thử lại." });
   } finally {
     connection.release();
   }
@@ -453,7 +437,8 @@ app.get("/api/orders", requireUser, async (request, response) => {
   try {
     const [orders] = await pool.execute(
       `SELECT id, order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
-        payment_status AS paymentStatus, order_status AS orderStatus, created_at AS createdAt
+        payment_status AS paymentStatus, order_status AS orderStatus,
+        cancellation_requested_at AS cancellationRequestedAt, created_at AS createdAt
        FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 50`, [request.session.user.id],
     );
     response.json({ orders: await attachOrderItems(orders) });
@@ -510,7 +495,8 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
     const [orders] = await pool.execute(
       `SELECT id, order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
         payment_status AS paymentStatus, order_status AS orderStatus, shipping_name AS shippingName,
-        shipping_phone AS shippingPhone, shipping_address AS shippingAddress, blockchain_key AS blockchainKey,
+        shipping_phone AS shippingPhone, shipping_address AS shippingAddress,
+        cancellation_requested_at AS cancellationRequestedAt, blockchain_key AS blockchainKey,
         blockchain_digest AS blockchainDigest, blockchain_tx_hash AS blockchainTxHash,
         blockchain_status AS blockchainStatus, created_at AS createdAt
        FROM orders ORDER BY created_at DESC LIMIT 100`,
@@ -573,12 +559,18 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      "SELECT order_status AS orderStatus, payment_status AS paymentStatus, payment_method AS paymentMethod FROM orders WHERE id = ? FOR UPDATE", [id],
+      `SELECT order_status AS orderStatus, payment_status AS paymentStatus, payment_method AS paymentMethod,
+        cancellation_requested_at AS cancellationRequestedAt
+       FROM orders WHERE id = ? FOR UPDATE`, [id],
     );
     const order = rows[0];
     if (!order) {
       await connection.rollback();
       return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
+    }
+    if (order.cancellationRequestedAt) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn đang có yêu cầu hủy. Hãy xử lý yêu cầu trước khi cập nhật trạng thái." });
     }
     if (orderStatus) {
       if (!orderTransitions[order.orderStatus]?.has(orderStatus)) {
@@ -623,6 +615,64 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
   } catch {
     await connection.rollback();
     response.status(503).json({ error: "Chưa cập nhật được đơn hàng." });
+  } finally {
+    connection.release();
+  }
+});
+
+app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin, async (request, response) => {
+  const id = Number(request.params.id);
+  const action = request.body?.action;
+  if (!Number.isSafeInteger(id) || id < 1 || !["approve", "decline"].includes(action)) {
+    return response.status(400).json({ error: "Yêu cầu xử lý hủy đơn không hợp lệ." });
+  }
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT order_status AS orderStatus, payment_status AS paymentStatus,
+        cancellation_requested_at AS cancellationRequestedAt
+       FROM orders WHERE id = ? FOR UPDATE`, [id],
+    );
+    const order = rows[0];
+    if (!order) {
+      await connection.rollback();
+      return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
+    }
+    if (!order.cancellationRequestedAt) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng không còn yêu cầu hủy đang chờ xử lý." });
+    }
+    if (!["pending", "confirmed", "packing"].includes(order.orderStatus)) {
+      await connection.rollback();
+      return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể xử lý hủy." });
+    }
+    if (action === "decline") {
+      await connection.execute("UPDATE orders SET cancellation_requested_at = NULL WHERE id = ?", [id]);
+    } else {
+      if (order.paymentStatus === "paid" && request.body?.refundConfirmed !== true) {
+        await connection.rollback();
+        return response.status(409).json({ error: "Hãy xác nhận đã xử lý hoàn tiền trước khi duyệt hủy đơn đã thanh toán." });
+      }
+      const [items] = await connection.execute(
+        "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [id],
+      );
+      for (const item of items) {
+        if (item.productId != null) {
+          await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
+        }
+      }
+      await connection.execute(
+        `UPDATE orders SET order_status = 'cancelled',
+          payment_status = CASE WHEN payment_status = 'paid' THEN 'refunded' ELSE payment_status END,
+          cancellation_requested_at = NULL WHERE id = ?`, [id],
+      );
+    }
+    await connection.commit();
+    response.json({ ok: true });
+  } catch {
+    await connection.rollback();
+    response.status(503).json({ error: "Chưa xử lý được yêu cầu hủy đơn." });
   } finally {
     connection.release();
   }

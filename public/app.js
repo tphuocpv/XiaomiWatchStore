@@ -367,7 +367,7 @@ async function loadOrders() {
       const actions = document.createElement("div");
       actions.className = "customer-order-actions";
       if (order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)
-          && order.orderStatus !== "cancelled") {
+          && order.orderStatus !== "cancelled" && !order.cancellationRequestedAt) {
         const retry = document.createElement("button");
         retry.className = "order-action-primary";
         retry.type = "button";
@@ -375,20 +375,18 @@ async function loadOrders() {
         retry.addEventListener("click", () => retryVnpayPayment(order, retry));
         actions.append(retry);
       }
-      if (["pending", "confirmed", "packing"].includes(order.orderStatus)
-          && !["paid", "refunded"].includes(order.paymentStatus)) {
+      if (order.cancellationRequestedAt) {
+        const requestNote = document.createElement("small");
+        requestNote.className = "order-action-note";
+        requestNote.textContent = "Yêu cầu hủy đang chờ cửa hàng xử lý.";
+        actions.append(requestNote);
+      } else if (["pending", "confirmed", "packing"].includes(order.orderStatus)) {
         const cancel = document.createElement("button");
         cancel.className = "order-action-secondary";
         cancel.type = "button";
-        cancel.textContent = "Hủy đơn";
-        cancel.addEventListener("click", () => cancelCustomerOrder(order, cancel));
+        cancel.textContent = "Yêu cầu hủy";
+        cancel.addEventListener("click", () => requestCustomerCancellation(order, cancel));
         actions.append(cancel);
-      } else if (["pending", "confirmed", "packing"].includes(order.orderStatus)
-          && ["paid", "refunded"].includes(order.paymentStatus)) {
-        const cancellationNote = document.createElement("small");
-        cancellationNote.className = "order-action-note";
-        cancellationNote.textContent = "Đơn đã thanh toán; không thể tự hủy trực tuyến.";
-        actions.append(cancellationNote);
       } else if (order.orderStatus === "cancelled" && order.paymentStatus === "paid") {
         const cancellationNote = document.createElement("small");
         cancellationNote.className = "order-action-note";
@@ -419,20 +417,21 @@ async function retryVnpayPayment(order, button) {
   }
 }
 
-async function cancelCustomerOrder(order, button) {
-  if (!window.confirm(`Bạn muốn hủy đơn ${order.orderCode}?`)) return;
+async function requestCustomerCancellation(order, button) {
+  const paidNote = order.paymentStatus === "paid" ? " Cửa hàng sẽ xử lý hoàn tiền trước khi duyệt hủy." : "";
+  if (!window.confirm(`Gửi yêu cầu hủy đơn ${order.orderCode}?${paidNote}`)) return;
   button.disabled = true;
   try {
-    await api(`/api/orders/${order.id}/cancel`, { method: "POST" });
+    await api(`/api/orders/${order.id}/cancellation-request`, { method: "POST" });
     const message = $("#account-message");
     message.classList.add("success");
-    message.textContent = `Đơn ${order.orderCode} đã được hủy.`;
+    message.textContent = `Đã gửi yêu cầu hủy đơn ${order.orderCode}.`;
     await loadOrders();
   } catch (error) {
     button.disabled = false;
     const message = $("#account-message");
     message.classList.remove("success");
-    message.textContent = vietnameseError(error, "Chưa hủy được đơn hàng. Vui lòng thử lại.");
+    message.textContent = vietnameseError(error, "Chưa gửi được yêu cầu hủy. Vui lòng thử lại.");
   }
 }
 

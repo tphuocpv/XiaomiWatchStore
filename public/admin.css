@@ -33,6 +33,11 @@
 .order-proof { margin-top: 12px; padding: 12px; background: #f3f8f5; border: 1px dashed #cddbd2; border-radius: 9px; overflow-wrap: anywhere; }
 .order-proof small { display: block; color: #68716e; margin-top: 5px; }
 .order-proof a { color: #176451; font-size: 12px; }
+.order-cancellation-request { display: grid; gap: 6px; margin-top: 14px; padding: 13px; border: 1px solid #ead9bb; border-radius: 9px; background: #fffaf1; color: #594629; }
+.order-cancellation-request small { color: #7b6a50; font-size: 11px; }
+.order-cancellation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.order-cancellation-actions button { padding: 8px 11px; border: 1px solid #d9c8a7; border-radius: 7px; background: #fff; color: #594629; font: inherit; font-size: 11px; cursor: pointer; }
+.order-cancellation-actions button:disabled { opacity: .6; cursor: wait; }
 .proof-button { padding: 10px 13px; border: 0; border-radius: 8px; background: #176451; color: #fff; cursor: pointer; font-weight: 700; }
 .proof-button:disabled { opacity: .5; cursor: wait; }
 .product-editor { margin-bottom: 25px; }

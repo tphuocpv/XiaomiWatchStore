@@ -4,7 +4,8 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 
 ## Tính năng
 
-- Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng, theo dõi đơn và hủy đơn chưa thanh toán trước khi giao hàng.
+- Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng và gửi yêu cầu hủy trước khi đơn chuyển sang giao hàng.
+- Quản trị viên duyệt hoặc từ chối yêu cầu hủy; đơn đã thanh toán cần được hoàn tiền trước khi duyệt.
 - Khách hàng có thể tiếp tục thanh toán VNPay nếu giao dịch chưa hoàn tất.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
 - MetaMask xác nhận giao dịch ghi bằng chứng đơn hàng lên blockchain.
@@ -30,6 +31,8 @@ Yêu cầu Node.js 22 trở lên và MySQL. Các lệnh sau chạy trong PowerSh
 ```
 
 Mở <http://127.0.0.1:3000> để truy cập cửa hàng. Nếu MySQL dùng cổng hoặc mật khẩu khác, cập nhật các biến `DB_*` trong `.env`.
+
+Sau khi cập nhật mã nguồn, chạy lại `.\npm-local.cmd run db:setup` để áp dụng các thay đổi cấu trúc database.
 
 Tài khoản quản trị mặc định: `admin` / `Admin@123456`. Có thể đặt tên đăng nhập và mật khẩu khác trong `.env` trước khi khởi tạo database. Tài khoản đã tạo sẽ giữ nguyên mật khẩu hiện có. Thông tin mặc định chỉ dành cho môi trường trình diễn cục bộ.
 

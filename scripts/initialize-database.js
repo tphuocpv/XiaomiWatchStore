@@ -16,6 +16,16 @@ try {
   const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8");
   const seed = await readFile(new URL("../database/seed.sql", import.meta.url), "utf8");
   await connection.query(schema);
+  const [cancellationColumns] = await connection.execute(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'xiaomi_watch_store' AND TABLE_NAME = 'orders'
+       AND COLUMN_NAME = 'cancellation_requested_at'`,
+  );
+  if (cancellationColumns.length === 0) {
+    await connection.query(
+      "ALTER TABLE xiaomi_watch_store.orders ADD COLUMN cancellation_requested_at TIMESTAMP NULL DEFAULT NULL AFTER customer_note",
+    );
+  }
   await connection.query(seed);
   const username = (process.env.ADMIN_USERNAME || "admin").trim();
   const password = process.env.ADMIN_PASSWORD || "Admin@123456";
