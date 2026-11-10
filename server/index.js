@@ -36,6 +36,7 @@ app.disable("x-powered-by");
 app.use(helmet({
   contentSecurityPolicy: { directives: {
     defaultSrc: ["'self'"], imgSrc: ["'self'", "data:"], styleSrc: ["'self'"],
+    styleSrcAttr: ["'unsafe-inline'"],
     scriptSrc: ["'self'"], connectSrc: ["'self'"], objectSrc: ["'none'"],
     baseUri: ["'self'"], formAction: ["'self'"],
   } },
@@ -865,6 +866,7 @@ app.post("/api/admin/orders/:id/anchor", requireUser, requireAdmin, async (reque
 });
 
 app.use("/api", (_request, response) => response.status(404).json({ error: "API không tồn tại." }));
+app.use("/vendor/sweetalert2", express.static(fileURLToPath(new URL("../node_modules/sweetalert2/dist/", import.meta.url)), { maxAge: "1d" }));
 app.use(express.static(fileURLToPath(new URL("../public/", import.meta.url)), { extensions: ["html"] }));
 app.use((_request, response) => response.status(404).sendFile(fileURLToPath(new URL("../public/404.html", import.meta.url))));
 app.use((error, _request, response, _next) => {

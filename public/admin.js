@@ -1,4 +1,5 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
+import { confirmAction, showToast } from "./notifications.js";
 
 const $ = (selector) => document.querySelector(selector);
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
@@ -315,24 +316,28 @@ function renderOrder(order) {
 }
 
 async function resolveCancellationRequest(order, action, button) {
-  if (action === "approve") {
-    const paid = order.paymentStatus === "paid";
-    const prompt = paid
-      ? "Chỉ tiếp tục sau khi đã xử lý hoàn tiền. Hệ thống sẽ ghi nhận đơn là đã hoàn tiền và hủy đơn. Tiếp tục?"
-      : "Duyệt yêu cầu hủy và trả sản phẩm về tồn kho?";
-    if (!window.confirm(prompt)) return;
-  }
+  const paid = order.paymentStatus === "paid";
+  const prompt = action === "approve"
+    ? paid
+      ? "Chỉ tiếp tục sau khi đã xử lý hoàn tiền. Hệ thống sẽ ghi nhận đơn là đã hoàn tiền và hủy đơn."
+      : "Duyệt yêu cầu hủy và trả sản phẩm về tồn kho?"
+    : "Từ chối yêu cầu hủy này? Khách hàng có thể gửi yêu cầu mới nếu đơn chưa chuyển sang giao hàng.";
+  if (!await confirmAction({
+    title: action === "approve" ? "Xác nhận duyệt hủy đơn?" : "Từ chối yêu cầu hủy?",
+    text: prompt,
+    confirmText: action === "approve" ? "Duyệt hủy đơn" : "Từ chối yêu cầu",
+  })) return;
   button.disabled = true;
   try {
     await api(`/api/admin/orders/${order.id}/cancellation-request`, {
       method: "POST",
       body: JSON.stringify({ action, refundConfirmed: action === "approve" && order.paymentStatus === "paid" }),
     });
-    announce(action === "approve" ? `Đã xử lý yêu cầu hủy đơn ${order.orderCode}.` : `Đã từ chối yêu cầu hủy đơn ${order.orderCode}.`);
+    showToast({ title: action === "approve" ? `Đã xử lý hủy đơn ${order.orderCode}.` : `Đã từ chối yêu cầu ${order.orderCode}.` });
     await loadOrders();
   } catch (error) {
     button.disabled = false;
-    announce(vietnameseError(error, "Chưa xử lý được yêu cầu hủy đơn."), true);
+    showToast({ title: vietnameseError(error, "Chưa xử lý được yêu cầu hủy đơn."), icon: "error", timer: 5200 });
   }
 }
 
@@ -567,10 +572,15 @@ $("#user-form").addEventListener("submit", async (event) => {
   }
 });
 $("#admin-logout").addEventListener("click", async () => {
+  if (!await confirmAction({
+    title: "Đăng xuất khỏi trang quản trị?",
+    text: "Bạn sẽ trở về trang cửa hàng sau khi đăng xuất.",
+    confirmText: "Đăng xuất",
+  })) return;
   try {
     await api("/api/auth/logout", { method: "POST" });
-    window.location.assign("/");
-  } catch (error) { announce(vietnameseError(error, "Chưa đăng xuất được."), true); }
+    window.location.assign("/?notice=logged-out");
+  } catch (error) { showToast({ title: vietnameseError(error, "Chưa đăng xuất được."), icon: "error", timer: 5200 }); }
 });
 $("#product-reset").addEventListener("click", () => populateProductForm(null));
 $("#category-reset").addEventListener("click", () => populateCategoryForm(null));

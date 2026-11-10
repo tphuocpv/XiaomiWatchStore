@@ -7,6 +7,7 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 - Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng và gửi yêu cầu hủy trước khi đơn chuyển sang giao hàng.
 - Quản trị viên duyệt hoặc từ chối yêu cầu hủy; đơn đã thanh toán cần được hoàn tiền trước khi duyệt.
 - Khách hàng có thể tiếp tục thanh toán VNPay nếu giao dịch chưa hoàn tất.
+- SweetAlert2 hiển thị hộp thoại xác nhận và thông báo trạng thái cho các thao tác quan trọng.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
 - MetaMask xác nhận giao dịch ghi bằng chứng đơn hàng lên blockchain.
 - Máy chủ kiểm tra giá và tồn kho trước khi tạo đơn; hệ thống không lưu thông tin thẻ.
@@ -17,6 +18,7 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 - Node.js, Express và MySQL
 - Solidity, Hardhat Network và MetaMask
 - VNPay Sandbox cho luồng thanh toán thử nghiệm
+- SweetAlert2 cho hộp thoại xác nhận, thông báo và toast
 
 ## Cài đặt trên Windows
 

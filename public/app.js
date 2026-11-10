@@ -1,4 +1,5 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
+import { confirmAction, showNotice, showToast } from "./notifications.js";
 
 const state = {
   products: [],
@@ -414,24 +415,32 @@ async function retryVnpayPayment(order, button) {
     const message = $("#account-message");
     message.classList.remove("success");
     message.textContent = vietnameseError(error, "Chưa mở được VNPay. Vui lòng thử lại.");
+    showToast({ title: message.textContent, icon: "error", timer: 5200 });
   }
 }
 
 async function requestCustomerCancellation(order, button) {
   const paidNote = order.paymentStatus === "paid" ? " Cửa hàng sẽ xử lý hoàn tiền trước khi duyệt hủy." : "";
-  if (!window.confirm(`Gửi yêu cầu hủy đơn ${order.orderCode}?${paidNote}`)) return;
+  const confirmed = await confirmAction({
+    title: "Gửi yêu cầu hủy đơn?",
+    text: `Đơn ${order.orderCode}.${paidNote}`,
+    confirmText: "Gửi yêu cầu",
+  });
+  if (!confirmed) return;
   button.disabled = true;
   try {
     await api(`/api/orders/${order.id}/cancellation-request`, { method: "POST" });
     const message = $("#account-message");
     message.classList.add("success");
     message.textContent = `Đã gửi yêu cầu hủy đơn ${order.orderCode}.`;
+    showToast({ title: "Đã gửi yêu cầu hủy", text: `Đơn ${order.orderCode} đang chờ cửa hàng xử lý.` });
     await loadOrders();
   } catch (error) {
     button.disabled = false;
     const message = $("#account-message");
     message.classList.remove("success");
     message.textContent = vietnameseError(error, "Chưa gửi được yêu cầu hủy. Vui lòng thử lại.");
+    showToast({ title: message.textContent, icon: "error", timer: 5200 });
   }
 }
 
@@ -484,13 +493,20 @@ $("#account-button").addEventListener("click", async () => {
 });
 
 $("#logout-button").addEventListener("click", async () => {
+  if (!await confirmAction({
+    title: "Đăng xuất khỏi tài khoản?",
+    text: "Bạn có thể đăng nhập lại bất cứ lúc nào.",
+    confirmText: "Đăng xuất",
+  })) return;
   try {
     await api("/api/auth/logout", { method: "POST" });
     setUser(null);
     closeDialog(accountDialog);
+    showToast({ title: "Bạn đã đăng xuất." });
   } catch (error) {
     $("#account-message").classList.remove("success");
     $("#account-message").textContent = vietnameseError(error, "Chưa đăng xuất được. Vui lòng thử lại.");
+    showToast({ title: $("#account-message").textContent, icon: "error", timer: 5200 });
   }
 });
 
@@ -597,7 +613,11 @@ $("#checkout-form").addEventListener("submit", async (event) => {
     }
     message.textContent = "";
     closeDialog(checkoutDialog);
-    window.alert("Đã tạo đơn " + result.order.orderCode + ". Bạn có thể xem trạng thái trong tài khoản.");
+    await showNotice({
+      title: "Đặt hàng thành công",
+      text: `Mã đơn ${result.order.orderCode}. Bạn có thể xem trạng thái trong tài khoản.`,
+      confirmText: "Đóng",
+    });
   } catch (error) {
     message.textContent = vietnameseError(error, "Chưa tạo được đơn hàng. Vui lòng thử lại.");
   } finally {
@@ -619,7 +639,9 @@ loadProducts();
 loadUser();
 loadPaymentOptions();
 
-const paymentResult = new URLSearchParams(window.location.search).get("payment");
+const query = new URLSearchParams(window.location.search);
+const paymentResult = query.get("payment");
+const pageNotice = query.get("notice");
 if (paymentResult) {
   const labels = {
     success: "Thanh toán đã hoàn tất. Đơn hàng sẽ được cập nhật trong lịch sử.",
@@ -627,7 +649,15 @@ if (paymentResult) {
     invalid: "Chưa xác minh được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng.",
     error: "Chưa cập nhật được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng hoặc thử thanh toán lại.",
   };
-  if (labels[paymentResult]) window.setTimeout(() => window.alert(labels[paymentResult]), 100);
+  if (labels[paymentResult]) {
+    const success = paymentResult === "success";
+    showToast({ title: labels[paymentResult], icon: success ? "success" : "warning", timer: 5200 });
+  }
+}
+if (pageNotice === "logged-out") {
+  showToast({ title: "Bạn đã đăng xuất." });
+}
+if (paymentResult || pageNotice) {
   window.history.replaceState({}, "", "/");
 }
 
