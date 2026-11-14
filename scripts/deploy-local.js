@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { ContractFactory, JsonRpcProvider, Wallet, getAddress, keccak256, parseEther, toQuantity } from "ethers";
+import { ContractFactory, JsonRpcProvider, Wallet, getAddress, keccak256, parseEther, toQuantity, toUtf8Bytes } from "ethers";
 import { chainId, rpcUrl } from "../local-network.js";
 
 const artifactFile = new URL("../artifacts/contracts/OrderRegistry.sol/OrderRegistry.json", import.meta.url);
@@ -35,7 +35,7 @@ async function deploy() {
     await provider.send("hardhat_setBalance", [admin, toQuantity(parseEther("10"))]);
   }
 
-  const artifactHash = keccak256(`${bytecode}${escrowArtifact.bytecode}${admin}${quoteSigner}`);
+  const artifactHash = keccak256(toUtf8Bytes(JSON.stringify({ bytecode, escrowBytecode: escrowArtifact.bytecode, admin, quoteSigner })));
   const previous = await optionalJson(deploymentFile);
   const existingCode = previous ? await provider.getCode(previous.address) : "0x";
   const existingEscrowCode = previous?.escrow?.address ? await provider.getCode(previous.escrow.address) : "0x";
