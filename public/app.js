@@ -508,7 +508,7 @@ async function loadPaymentOptions() {
     if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
     if (status.cryptoEthVndRate) {
       const rate = new Intl.NumberFormat("vi-VN").format(Number(status.cryptoEthVndRate));
-      $("#crypto-availability").textContent = `Tỷ giá demo 1 ETH = ${rate} ₫; ETH chỉ dùng trên LabChain Local, không phải tiền thật.`;
+      $("#crypto-availability").textContent = `Tỷ giá tham khảo 1 ETH = ${rate} ₫; giao dịch chỉ mang tính mô phỏng.`;
     }
     note.textContent = configured
       ? "Giao dịch được xử lý trong môi trường thử nghiệm, không phát sinh khoản thu thực."
