@@ -1,5 +1,6 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
 import { confirmAction, showNotice, showToast } from "./notifications.js";
+import { submitCryptoPayment } from "./crypto-wallet.js";
 
 const state = {
   products: [],
@@ -353,9 +354,16 @@ async function loadOrders() {
       title.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
       const status = document.createElement("p");
       const paymentLabels = { unpaid: "chưa thanh toán", paid: "đã thanh toán", failed: "thanh toán lỗi", refunded: "đã hoàn tiền" };
-      const methodLabel = order.paymentMethod === "vnpay" ? "VNPay" : "Thanh toán khi nhận hàng";
+      const methodLabel = order.paymentMethod === "vnpay" ? "VNPay"
+        : order.paymentMethod === "crypto" ? "ETH qua MetaMask" : "Thanh toán khi nhận hàng";
       status.textContent = `Đơn: ${orderLabels[order.orderStatus] || order.orderStatus} · ${methodLabel} · ${paymentLabels[order.paymentStatus] || "chưa cập nhật"}`;
       card.append(title, status);
+      if (order.paymentMethod === "crypto" && order.cryptoAmountWei && window.ethers) {
+        const quote = document.createElement("small");
+        quote.className = "order-action-note";
+        quote.textContent = `Số tiền: ${window.ethers.formatEther(order.cryptoAmountWei)} ETH thử nghiệm`;
+        card.append(quote);
+      }
       const items = document.createElement("ul");
       items.className = "customer-order-items";
       for (const item of order.items ?? []) {
@@ -367,13 +375,30 @@ async function loadOrders() {
 
       const actions = document.createElement("div");
       actions.className = "customer-order-actions";
+      const vnpayPendingUntil = order.vnpayPendingUntil ? new Date(order.vnpayPendingUntil) : null;
+      const vnpayAttemptActive = vnpayPendingUntil && vnpayPendingUntil.getTime() > Date.now();
       if (order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)
-          && order.orderStatus !== "cancelled" && !order.cancellationRequestedAt) {
+          && order.orderStatus !== "cancelled" && !order.cancellationRequestedAt && !vnpayAttemptActive) {
         const retry = document.createElement("button");
         retry.className = "order-action-primary";
         retry.type = "button";
         retry.textContent = "Thanh toán lại";
         retry.addEventListener("click", () => retryVnpayPayment(order, retry));
+        actions.append(retry);
+      }
+      if (order.paymentMethod === "vnpay" && vnpayAttemptActive && !order.cancellationRequestedAt) {
+        const waiting = document.createElement("small");
+        waiting.className = "order-action-note";
+        waiting.textContent = `Phiên thanh toán đang mở đến ${vnpayPendingUntil.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}. Hoàn tất hoặc chờ phiên hết hạn để thanh toán lại.`;
+        actions.append(waiting);
+      }
+      if (order.paymentMethod === "crypto" && ["unpaid", "failed"].includes(order.paymentStatus)
+          && order.orderStatus !== "cancelled" && !order.cancellationRequestedAt) {
+        const retry = document.createElement("button");
+        retry.className = "order-action-primary";
+        retry.type = "button";
+        retry.textContent = "Thanh toán ETH thử nghiệm";
+        retry.addEventListener("click", () => retryCryptoPayment(order, retry));
         actions.append(retry);
       }
       if (order.cancellationRequestedAt) {
@@ -391,7 +416,7 @@ async function loadOrders() {
       } else if (order.orderStatus === "cancelled" && order.paymentStatus === "paid") {
         const cancellationNote = document.createElement("small");
         cancellationNote.className = "order-action-note";
-        cancellationNote.textContent = "Đơn đã hủy nhưng giao dịch được xác nhận sau đó. Vui lòng liên hệ cửa hàng để được hỗ trợ.";
+        cancellationNote.textContent = "VNPay xác nhận thanh toán sau khi đơn đã hủy. Cửa hàng sẽ kiểm tra và hỗ trợ hoàn tiền.";
         actions.append(cancellationNote);
       }
       if (actions.childElementCount) card.append(actions);
@@ -416,6 +441,34 @@ async function retryVnpayPayment(order, button) {
     message.classList.remove("success");
     message.textContent = vietnameseError(error, "Chưa mở được VNPay. Vui lòng thử lại.");
     showToast({ title: message.textContent, icon: "error", timer: 5200 });
+  }
+}
+
+async function retryCryptoPayment(order, button) {
+  button.disabled = true;
+  button.textContent = "Đang mở MetaMask…";
+  const storageKey = `miwatch-crypto-tx-${order.id}`;
+  let txHash = localStorage.getItem(storageKey);
+  try {
+    if (!txHash) {
+      const quote = await api(`/api/orders/${order.id}/payments/crypto/retry`, { method: "POST" });
+      txHash = await submitCryptoPayment(order, quote, (submittedHash) => localStorage.setItem(storageKey, submittedHash));
+    }
+    await api(`/api/orders/${order.id}/payments/crypto/confirm`, {
+      method: "POST", body: JSON.stringify({ txHash }),
+    });
+    localStorage.removeItem(storageKey);
+    showToast({ title: `Đã thanh toán đơn ${order.orderCode} bằng ETH thử nghiệm.` });
+    await loadOrders();
+  } catch (error) {
+    const message = vietnameseError(error, "Chưa hoàn tất thanh toán. Đơn vẫn được lưu để bạn thử lại.");
+    const accountMessage = $("#account-message");
+    accountMessage.classList.remove("success");
+    accountMessage.textContent = txHash && localStorage.getItem(storageKey)
+      ? `${message} Mã giao dịch đã được lưu trên trình duyệt để đồng bộ lại khi thử lần nữa.` : message;
+    showToast({ title: message, icon: "error", timer: 6500 });
+    button.disabled = false;
+    button.textContent = "Thanh toán ETH thử nghiệm";
   }
 }
 
@@ -453,6 +506,10 @@ async function loadPaymentOptions() {
     const configured = status.vnpaySandboxConfigured === true;
     option.disabled = !configured;
     if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
+    if (status.cryptoEthVndRate) {
+      const rate = new Intl.NumberFormat("vi-VN").format(Number(status.cryptoEthVndRate));
+      $("#crypto-availability").textContent = `Tỷ giá demo 1 ETH = ${rate} ₫; ETH chỉ dùng trên LabChain Local, không phải tiền thật.`;
+    }
     note.textContent = configured
       ? "Giao dịch được xử lý trong môi trường thử nghiệm, không phát sinh khoản thu thực."
       : "Thanh toán VNPay hiện chưa khả dụng. Bạn có thể chọn thanh toán khi nhận hàng.";
@@ -460,6 +517,12 @@ async function loadPaymentOptions() {
     option.disabled = true;
     note.textContent = "Không thể kiểm tra VNPay lúc này. Vui lòng chọn thanh toán khi nhận hàng.";
   }
+}
+
+function updatePaymentNotes() {
+  const selected = $("input[name=paymentMethod]:checked")?.value;
+  $("#vnpay-availability").hidden = selected !== "vnpay";
+  $("#crypto-availability").hidden = selected !== "crypto";
 }
 
 async function submitAuth(form, endpoint) {
@@ -611,6 +674,16 @@ $("#checkout-form").addEventListener("submit", async (event) => {
       window.location.assign(result.paymentUrl);
       return;
     }
+    if (result.order.paymentMethod === "crypto") {
+      closeDialog(checkoutDialog);
+      const paymentButton = document.createElement("button");
+      paymentButton.type = "button";
+      paymentButton.disabled = true;
+      paymentButton.textContent = "Đang mở MetaMask…";
+      message.textContent = `Đã tạo đơn ${result.order.orderCode}. Hãy xác nhận số ETH thử nghiệm trong MetaMask.`;
+      await retryCryptoPayment(result.order, paymentButton);
+      return;
+    }
     message.textContent = "";
     closeDialog(checkoutDialog);
     await showNotice({
@@ -638,6 +711,8 @@ document.addEventListener("keydown", (event) => {
 loadProducts();
 loadUser();
 loadPaymentOptions();
+document.querySelectorAll('input[name="paymentMethod"]').forEach((input) => input.addEventListener("change", updatePaymentNotes));
+updatePaymentNotes();
 
 const query = new URLSearchParams(window.location.search);
 const paymentResult = query.get("payment");
@@ -645,6 +720,7 @@ const pageNotice = query.get("notice");
 if (paymentResult) {
   const labels = {
     success: "Thanh toán đã hoàn tất. Đơn hàng sẽ được cập nhật trong lịch sử.",
+    late: "VNPay báo đã thanh toán nhưng đơn đã hủy. Cửa hàng sẽ kiểm tra và hỗ trợ hoàn tiền.",
     failed: "Thanh toán chưa hoàn tất. Bạn có thể thử lại trong mục Đơn hàng của tôi.",
     invalid: "Chưa xác minh được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng.",
     error: "Chưa cập nhật được kết quả thanh toán. Hãy kiểm tra lịch sử đơn hàng hoặc thử thanh toán lại.",

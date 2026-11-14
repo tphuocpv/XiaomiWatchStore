@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS orders (
   subtotal_vnd DECIMAL(13,0) UNSIGNED NOT NULL,
   shipping_fee_vnd DECIMAL(13,0) UNSIGNED NOT NULL DEFAULT 0,
   total_vnd DECIMAL(13,0) UNSIGNED NOT NULL,
-  payment_method ENUM('vnpay', 'cod') NOT NULL,
+  payment_method ENUM('vnpay', 'cod', 'crypto') NOT NULL,
   payment_status ENUM('unpaid', 'paid', 'failed', 'refunded') NOT NULL DEFAULT 'unpaid',
   order_status ENUM('pending', 'confirmed', 'packing', 'shipped', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
   shipping_name VARCHAR(120) NOT NULL,
@@ -94,4 +94,26 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
   UNIQUE KEY uq_payment_ref (transaction_ref),
   KEY idx_payment_order (order_id),
   CONSTRAINT fk_payment_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Chỉ lưu thông tin phục vụ đối chiếu khoản ETH thử nghiệm; không lưu dữ liệu giao hàng trên blockchain.
+CREATE TABLE IF NOT EXISTS crypto_payments (
+  order_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+  chain_id BIGINT UNSIGNED NOT NULL DEFAULT 31337,
+  amount_wei VARCHAR(78) NOT NULL,
+  buyer_address CHAR(42) NULL,
+  payment_tx_hash CHAR(66) NULL,
+  ship_tx_hash CHAR(66) NULL,
+  release_tx_hash CHAR(66) NULL,
+  refund_tx_hash CHAR(66) NULL,
+  cancel_tx_hash CHAR(66) NULL,
+  status ENUM('unpaid', 'escrowed', 'shipped', 'released', 'refunded', 'cancelled') NOT NULL DEFAULT 'unpaid',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_crypto_payment_tx (payment_tx_hash),
+  UNIQUE KEY uq_crypto_ship_tx (ship_tx_hash),
+  UNIQUE KEY uq_crypto_release_tx (release_tx_hash),
+  UNIQUE KEY uq_crypto_refund_tx (refund_tx_hash),
+  UNIQUE KEY uq_crypto_cancel_tx (cancel_tx_hash),
+  CONSTRAINT fk_crypto_payment_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

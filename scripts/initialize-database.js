@@ -16,6 +16,16 @@ try {
   const schema = await readFile(new URL("../database/schema.sql", import.meta.url), "utf8");
   const seed = await readFile(new URL("../database/seed.sql", import.meta.url), "utf8");
   await connection.query(schema);
+  const [paymentMethodColumns] = await connection.execute(
+    `SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = 'xiaomi_watch_store' AND TABLE_NAME = 'orders'
+       AND COLUMN_NAME = 'payment_method'`,
+  );
+  if (paymentMethodColumns[0] && !paymentMethodColumns[0].COLUMN_TYPE.includes("'crypto'")) {
+    await connection.query(
+      "ALTER TABLE xiaomi_watch_store.orders MODIFY payment_method ENUM('vnpay', 'cod', 'crypto') NOT NULL",
+    );
+  }
   const [cancellationColumns] = await connection.execute(
     `SELECT COLUMN_NAME FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = 'xiaomi_watch_store' AND TABLE_NAME = 'orders'

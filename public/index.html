@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
     <link rel="stylesheet" href="/notifications.css">
     <script src="/vendor/sweetalert2/sweetalert2.all.min.js"></script>
+    <script src="/vendor/ethers/ethers.umd.min.js"></script>
     <script type="module" src="/app.js"></script>
   </head>
   <body>
@@ -175,7 +176,13 @@
                 <span class="payment-choice-copy"><strong>VNPay</strong><small>Thanh toán thử nghiệm, không thu tiền thật</small></span>
                 <span class="payment-tag payment-tag-test">Sandbox</span>
               </label>
-              <p class="payment-note" id="vnpay-availability" role="status"></p>
+              <label class="payment-choice">
+                <input id="crypto-option" type="radio" name="paymentMethod" value="crypto">
+                <span class="payment-choice-copy"><strong>ETH qua MetaMask</strong><small>ETH thử nghiệm được giữ trong hợp đồng đến khi giao hàng</small></span>
+                <span class="payment-tag payment-tag-test">Local</span>
+              </label>
+              <p class="payment-note" id="vnpay-availability" role="status" hidden></p>
+              <p class="payment-note" id="crypto-availability" role="status" hidden>Chỉ dùng ETH thử nghiệm trên LabChain Local; không phát sinh thanh toán tiền thật.</p>
             </fieldset>
           </section>
           <p class="form-message" id="checkout-message" role="status"></p>

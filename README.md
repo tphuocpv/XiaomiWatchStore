@@ -1,12 +1,18 @@
 # MiTime Watch Store
 
-MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thông minh Xiaomi và Redmi, gồm cửa hàng cho khách hàng và bảng điều khiển quản trị. MySQL quản lý tài khoản, danh mục, sản phẩm, tồn kho và đơn hàng. Hợp đồng Solidity lưu mã băm cùng trạng thái đơn hàng trên blockchain thử nghiệm; thông tin cá nhân được giữ trong MySQL. Thanh toán hỗ trợ COD và VNPay Sandbox.
+MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thông minh Xiaomi và Redmi, gồm cửa hàng cho khách hàng và bảng điều khiển quản trị. MySQL quản lý tài khoản, danh mục, sản phẩm, tồn kho và đơn hàng. Hợp đồng Solidity lưu bằng chứng đơn hàng và giữ ETH thử nghiệm trong escrow; thông tin cá nhân được giữ trong MySQL. Thanh toán hỗ trợ COD, VNPay Sandbox và ETH trên Hardhat Local.
 
 ## Tính năng
 
 - Khách hàng tìm kiếm, lọc sản phẩm, tạo tài khoản, đăng nhập, đặt hàng và gửi yêu cầu hủy trước khi đơn chuyển sang giao hàng.
 - Quản trị viên duyệt hoặc từ chối yêu cầu hủy; đơn đã thanh toán cần được hoàn tiền trước khi duyệt.
 - Khách hàng có thể tiếp tục thanh toán VNPay nếu giao dịch chưa hoàn tất.
+- Mỗi đơn chỉ có một phiên VNPay đang mở; nút thanh toán lại xuất hiện sau khi phiên cũ kết thúc hoặc hết hạn.
+- Admin chờ phiên VNPay hết hạn trước khi duyệt hủy đơn chưa thanh toán, tránh nhận tiền sau khi hủy.
+- Nếu VNPay xác nhận tiền sau khi đơn đã hủy, trang quản trị báo cần đối soát; admin hoàn giao dịch trên VNPay Sandbox rồi ghi nhận kết quả trong MiTime.
+- Khách hàng có thể thanh toán bằng ETH thử nghiệm qua MetaMask; hợp đồng giữ khoản tiền đến khi đơn giao thành công.
+- Khi đơn bị hủy trước lúc giao, hợp đồng hoàn ETH cho khách; khi chuyển sang đang giao, hợp đồng khóa khả năng hoàn tiền.
+- Admin dùng MetaMask để giải ngân cho cửa hàng sau khi giao hàng và hoàn tiền khi duyệt hủy.
 - SweetAlert2 hiển thị hộp thoại xác nhận và thông báo trạng thái cho các thao tác quan trọng.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
 - MetaMask xác nhận giao dịch ghi bằng chứng đơn hàng lên blockchain.
@@ -25,8 +31,8 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 Yêu cầu Node.js 22 trở lên và MySQL. Các lệnh sau chạy trong PowerShell tại thư mục dự án:
 
 ```powershell
-.\npm-local.cmd run setup
 .\npm-local.cmd install
+.\npm-local.cmd run setup
 .\npm-local.cmd run mysql:start
 .\npm-local.cmd run db:setup
 .\npm-local.cmd run dev
@@ -40,7 +46,7 @@ Tài khoản quản trị mặc định: `admin` / `Admin@123456`. Có thể đ�
 
 ## Blockchain và MetaMask
 
-Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Ethereum Mainnet. Mạng này phục vụ trình diễn; ETH thử nghiệm không có giá trị thực.
+Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Ethereum Mainnet. Mạng này phục vụ trình diễn; ETH thử nghiệm không có giá trị thực. Tỷ giá quy đổi từ VND sang ETH được cố định cục bộ trong `CRYPTO_ETH_VND_RATE` của `.env` (mặc định 1 ETH = 100.000.000 ₫).
 
 1. Mở cửa sổ PowerShell khác và chạy:
 
@@ -62,9 +68,13 @@ Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Eth
    .\npm-local.cmd run deploy:local
    ```
 
-4. Thêm mạng **LabChain Local** vào MetaMask với RPC `http://127.0.0.1:8545`, Chain ID `31337` và ký hiệu tiền tệ `ETH`. Đăng nhập quản trị tại <http://127.0.0.1:3000/admin.html>, kết nối MetaMask và xác nhận giao dịch khi được yêu cầu.
+4. Thêm mạng **LabChain Local** vào MetaMask với RPC `http://127.0.0.1:8545`, Chain ID `31337` và ký hiệu tiền tệ `ETH`. Dùng các tài khoản test do Hardhat tạo; chỉ dùng chúng trên mạng local. Đăng nhập quản trị tại <http://127.0.0.1:3000/admin.html>, kết nối MetaMask và xác nhận giao dịch khi được yêu cầu.
 
-Giữ cửa sổ Hardhat mở trong khi trình diễn. Hợp đồng chỉ lưu mã băm đơn hàng và trạng thái, không lưu tên, địa chỉ hoặc số điện thoại khách hàng.
+Giữ cửa sổ Hardhat mở trong khi trình diễn. Máy chủ ký báo giá ETH bằng khóa ngẫu nhiên chỉ lưu trong .env; hợp đồng kiểm tra chữ ký và số tiền trước khi nhận. Hợp đồng chỉ lưu mã băm đơn hàng/hóa đơn, ví thanh toán, số ETH thử nghiệm và trạng thái escrow; không lưu tên, địa chỉ hoặc số điện thoại khách hàng.
+
+## Chia việc cho hai thành viên
+
+Xem [docs/PHAN_CHIA_CONG_VIEC.md](docs/PHAN_CHIA_CONG_VIEC.md) để biết phạm vi tệp, giao ước API/hợp đồng và cách phối hợp qua nhánh GitHub.
 
 ## Thanh toán VNPay
 
@@ -74,6 +84,8 @@ VNPay Sandbox dùng giao dịch mô phỏng và không thu tiền thật. Để 
 2. Điền hai giá trị vào `VNPAY_TMN_CODE` và `VNPAY_HASH_SECRET` trong `.env`. Không chia sẻ tệp `.env`.
 3. Khởi động lại máy chủ. Nếu chưa cấu hình merchant, khách hàng vẫn có thể chọn COD.
 4. Dùng thẻ thử nghiệm được nêu trong [tài liệu VNPay Sandbox](https://sandbox.vnpayment.vn/apis/docs/gioi-thieu/).
+
+Kết quả thanh toán đến muộn sau khi đơn bị hủy được hiển thị riêng cho khách và admin. Bản demo yêu cầu admin xử lý hoàn tiền trong cổng VNPay Sandbox trước khi xác nhận trạng thái hoàn tiền trong trang quản trị.
 
 Tài liệu tích hợp: [VNPay Pay API](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html). Trang trả kết quả có thể trở lại máy cục bộ; IPN từ VNPay không thể gọi trực tiếp tới `localhost`. Muốn trình diễn IPN cần một URL HTTPS công khai và cấu hình endpoint `/api/payments/vnpay/ipn` trong merchant.
 

@@ -1,5 +1,6 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
 import { confirmAction, showToast } from "./notifications.js";
+import { submitAdminEscrowAction } from "./crypto-wallet.js";
 
 const $ = (selector) => document.querySelector(selector);
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
@@ -197,7 +198,8 @@ function renderOrder(order) {
   heading.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
   const details = document.createElement("p");
   const paymentLabels = { unpaid: "Chưa thanh toán", paid: "Đã thanh toán", failed: "Thanh toán lỗi", refunded: "Đã hoàn tiền" };
-  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${order.paymentMethod === "cod" ? "Thanh toán khi nhận" : "VNPay (thử nghiệm)"} · ${paymentLabels[order.paymentStatus] || "Chưa cập nhật"}`;
+  const paymentMethodLabels = { cod: "Thanh toán khi nhận", vnpay: "VNPay (thử nghiệm)", crypto: "ETH qua MetaMask" };
+  details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${paymentMethodLabels[order.paymentMethod] || "Chưa rõ phương thức"} · ${paymentLabels[order.paymentStatus] || "Chưa cập nhật"}`;
   description.append(heading, details);
   const current = document.createElement("span");
   current.className = "product-category";
@@ -219,16 +221,23 @@ function renderOrder(order) {
   const controls = document.createElement("div");
   controls.className = "order-controls";
   let cancellationPanel = null;
+  let refundPanel = null;
   const status = document.createElement("select");
   status.setAttribute("aria-label", `Trạng thái đơn ${order.orderCode}`);
-  const vnpayUnpaid = order.paymentMethod === "vnpay" && order.paymentStatus !== "paid";
+  const electronicUnpaid = ["vnpay", "crypto"].includes(order.paymentMethod) && order.paymentStatus !== "paid";
+  const vnpayPendingUntil = order.vnpayPendingUntil ? new Date(order.vnpayPendingUntil) : null;
+  const vnpayAttemptActive = order.paymentMethod === "vnpay" && order.paymentStatus === "unpaid"
+    && vnpayPendingUntil && vnpayPendingUntil.getTime() > Date.now();
   for (const [code, label] of orderStates) {
     selectOption(status, code, label);
-    if (vnpayUnpaid && ["confirmed", "packing", "shipped", "delivered"].includes(code)) {
+    if (electronicUnpaid && ["confirmed", "packing", "shipped", "delivered"].includes(code)) {
       status.lastElementChild.disabled = true;
     }
+    if (code === "cancelled" && vnpayAttemptActive) status.lastElementChild.disabled = true;
+    if (order.paymentMethod === "crypto" && code === "cancelled") status.lastElementChild.disabled = true;
   }
-  if (vnpayUnpaid) status.title = "Chờ VNPay xác nhận thanh toán trước khi xử lý đơn.";
+  if (vnpayAttemptActive) status.title = "Chờ phiên VNPay hiện tại hoàn tất hoặc hết hạn trước khi hủy đơn.";
+  else if (electronicUnpaid) status.title = "Chờ xác nhận thanh toán điện tử trước khi xử lý đơn.";
   status.value = order.orderStatus;
   const saveStatus = document.createElement("button");
   saveStatus.type = "button";
@@ -238,8 +247,17 @@ function renderOrder(order) {
   saveStatus.disabled = Boolean(order.cancellationRequestedAt);
   saveStatus.addEventListener("click", async () => {
     try {
-      await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
-      announce(`Đã cập nhật đơn ${order.orderCode}. Ghi trạng thái mới lên blockchain khi cần.`);
+      if (status.value === order.orderStatus) return;
+      if (order.paymentMethod === "crypto" && status.value === "shipped") {
+        announce("Hãy xác nhận chuyển trạng thái sang đang giao trong MetaMask…");
+        await recordCryptoAdminAction(order, "mark-shipped", "markShipped");
+      } else if (order.paymentMethod === "crypto" && status.value === "delivered") {
+        announce("Hãy xác nhận giải ngân ETH trong MetaMask…");
+        await recordCryptoAdminAction(order, "release", "releaseOrder");
+      } else {
+        await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
+      }
+      announce(`Đã cập nhật đơn ${order.orderCode}.`);
       await loadOrders();
     } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được đơn hàng."), true); }
   });
@@ -257,7 +275,11 @@ function renderOrder(order) {
     const approve = document.createElement("button");
     approve.type = "button";
     approve.className = "secondary-button";
-    approve.textContent = order.paymentStatus === "paid" ? "Xác nhận hoàn tiền và hủy" : "Duyệt hủy đơn";
+    approve.textContent = order.paymentMethod === "crypto"
+      ? order.cryptoStatus === "escrowed" ? "Hoàn ETH và duyệt hủy"
+        : order.cryptoStatus === "refunded" ? "Hoàn tất duyệt hủy"
+          : order.cryptoStatus === "cancelled" ? "Duyệt hủy đơn" : "Khóa thanh toán và duyệt hủy"
+      : order.paymentStatus === "paid" ? "Xác nhận hoàn tiền và hủy" : "Duyệt hủy đơn";
     approve.addEventListener("click", () => resolveCancellationRequest(order, "approve", approve));
     const decline = document.createElement("button");
     decline.type = "button";
@@ -282,6 +304,41 @@ function renderOrder(order) {
     controls.append(paid);
   }
 
+  if (order.paymentMethod === "vnpay" && order.orderStatus === "cancelled" && order.paymentStatus === "paid") {
+    refundPanel = document.createElement("section");
+    refundPanel.className = "order-cancellation-request";
+    const warning = document.createElement("strong");
+    warning.textContent = "VNPay báo thanh toán thành công sau khi đơn đã hủy";
+    const note = document.createElement("small");
+    note.textContent = "Hãy hoàn tiền trên cổng VNPay Sandbox trước, sau đó xác nhận để cập nhật sổ đơn hàng.";
+    const refundActions = document.createElement("div");
+    refundActions.className = "order-cancellation-actions";
+    const refund = document.createElement("button");
+    refund.type = "button";
+    refund.className = "secondary-button";
+    refund.textContent = "Ghi nhận đã hoàn tiền VNPay";
+    refund.addEventListener("click", async () => {
+      if (!await confirmAction({
+        title: "Xác nhận đã hoàn tiền VNPay?",
+        text: "Chỉ tiếp tục sau khi khoản tiền đã được hoàn trên VNPay Sandbox. MiTime sẽ cập nhật trạng thái đối soát.",
+        confirmText: "Đã hoàn tiền",
+      })) return;
+      refund.disabled = true;
+      try {
+        await api(`/api/admin/orders/${order.id}/payments/vnpay/refund-confirmation`, {
+          method: "POST", body: JSON.stringify({ refundProcessed: true }),
+        });
+        showToast({ title: `Đã ghi nhận hoàn tiền cho đơn ${order.orderCode}.` });
+        await loadOrders();
+      } catch (error) {
+        refund.disabled = false;
+        showToast({ title: vietnameseError(error, "Chưa ghi nhận được khoản hoàn tiền."), icon: "error", timer: 5200 });
+      }
+    });
+    refundActions.append(refund);
+    refundPanel.append(warning, note, refundActions);
+  }
+
   const proof = document.createElement("div");
   proof.className = "order-proof";
   const proofText = document.createElement("div");
@@ -293,6 +350,23 @@ function renderOrder(order) {
   const digest = document.createElement("small");
   digest.textContent = `Mã băm đơn: ${order.blockchainDigest}`;
   proof.append(proofText, digest);
+  if (order.paymentMethod === "crypto") {
+    const cryptoDetails = document.createElement("small");
+    const amountEth = order.cryptoAmountWei && window.ethers ? window.ethers.formatEther(order.cryptoAmountWei) : "chưa có báo giá";
+    cryptoDetails.textContent = `Escrow: ${order.cryptoStatus || "chưa khởi tạo"} · ${amountEth} ETH thử nghiệm`;
+    proof.append(cryptoDetails);
+    if (order.cryptoPaymentTxHash) {
+      const paymentTx = document.createElement("small");
+      paymentTx.textContent = `Mã thanh toán: ${order.cryptoPaymentTxHash}`;
+      proof.append(paymentTx);
+    }
+    const escrowTx = order.cryptoReleaseTxHash || order.cryptoRefundTxHash || order.cryptoShipTxHash;
+    if (escrowTx) {
+      const actionTx = document.createElement("small");
+      actionTx.textContent = `Mã giao dịch escrow gần nhất: ${escrowTx}`;
+      proof.append(actionTx);
+    }
+  }
   if (order.blockchainTxHash) {
     const tx = document.createElement("small");
     tx.textContent = `Giao dịch gần nhất: ${order.blockchainTxHash}`;
@@ -311,6 +385,7 @@ function renderOrder(order) {
   card.append(top, address);
   if (items.childElementCount) card.append(items);
   if (cancellationPanel) card.append(cancellationPanel);
+  if (refundPanel) card.append(refundPanel);
   card.append(controls, proof);
   return card;
 }
@@ -318,7 +393,13 @@ function renderOrder(order) {
 async function resolveCancellationRequest(order, action, button) {
   const paid = order.paymentStatus === "paid";
   const prompt = action === "approve"
-    ? paid
+    ? order.paymentMethod === "crypto"
+      ? order.cryptoStatus === "escrowed"
+        ? "MetaMask sẽ hoàn ETH về ví khách. Chỉ hủy sau khi giao dịch hoàn tiền được xác nhận."
+        : order.cryptoStatus === "unpaid"
+          ? "MetaMask sẽ đánh dấu mã đơn đã hủy để ngăn giao dịch ETH đến muộn."
+          : "Hoàn tất yêu cầu hủy đã có giao dịch escrow xác nhận."
+      : paid
       ? "Chỉ tiếp tục sau khi đã xử lý hoàn tiền. Hệ thống sẽ ghi nhận đơn là đã hoàn tiền và hủy đơn."
       : "Duyệt yêu cầu hủy và trả sản phẩm về tồn kho?"
     : "Từ chối yêu cầu hủy này? Khách hàng có thể gửi yêu cầu mới nếu đơn chưa chuyển sang giao hàng.";
@@ -328,17 +409,45 @@ async function resolveCancellationRequest(order, action, button) {
     confirmText: action === "approve" ? "Duyệt hủy đơn" : "Từ chối yêu cầu",
   })) return;
   button.disabled = true;
+  let pendingActionKey = null;
   try {
+    if (action === "approve" && order.paymentMethod === "crypto") {
+      if (order.cryptoStatus === "escrowed" && order.paymentStatus === "paid") {
+        pendingActionKey = await recordCryptoAdminAction(order, "refund", "refundOrder", true);
+      } else if (order.cryptoStatus === "unpaid" && order.paymentStatus === "unpaid") {
+        pendingActionKey = await recordCryptoAdminAction(order, "cancel-unpaid", "cancelUnpaidOrder", true);
+      } else if (!["refunded", "cancelled"].includes(order.cryptoStatus)) {
+        throw new Error("Trạng thái escrow không phù hợp để duyệt hủy. Hãy tải lại danh sách đơn.");
+      }
+    }
     await api(`/api/admin/orders/${order.id}/cancellation-request`, {
       method: "POST",
-      body: JSON.stringify({ action, refundConfirmed: action === "approve" && order.paymentStatus === "paid" }),
+      body: JSON.stringify({
+        action,
+        refundConfirmed: action === "approve" && order.paymentStatus === "paid" && order.paymentMethod !== "crypto",
+      }),
     });
+    if (pendingActionKey) localStorage.removeItem(pendingActionKey);
     showToast({ title: action === "approve" ? `Đã xử lý hủy đơn ${order.orderCode}.` : `Đã từ chối yêu cầu ${order.orderCode}.` });
     await loadOrders();
   } catch (error) {
     button.disabled = false;
     showToast({ title: vietnameseError(error, "Chưa xử lý được yêu cầu hủy đơn."), icon: "error", timer: 5200 });
   }
+}
+
+async function recordCryptoAdminAction(order, action, contractMethod, keepForFollowUp = false) {
+  const storageKey = `miwatch-admin-escrow-${order.id}-${action}`;
+  let txHash = localStorage.getItem(storageKey);
+  if (!txHash) {
+    txHash = await submitAdminEscrowAction(order.blockchainKey, contractMethod);
+    localStorage.setItem(storageKey, txHash);
+  }
+  await api(`/api/admin/orders/${order.id}/payments/crypto/action`, {
+    method: "POST", body: JSON.stringify({ action, txHash }),
+  });
+  if (!keepForFollowUp) localStorage.removeItem(storageKey);
+  return storageKey;
 }
 
 async function connectWallet() {
