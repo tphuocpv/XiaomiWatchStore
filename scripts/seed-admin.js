@@ -4,7 +4,7 @@ import { pool } from "../server/db.js";
 
 try {
   const username = (process.env.ADMIN_USERNAME ?? "admin").trim();
-  const password = process.env.ADMIN_PASSWORD ?? "Admin@12345";
+  const password = process.env.ADMIN_PASSWORD ?? "Admin@123456";
   if (password.length < 12) throw new Error("ADMIN_PASSWORD cần ít nhất 12 ký tự.");
 
   const [existing] = await pool.execute("SELECT id FROM users WHERE username = ? LIMIT 1", [username]);
