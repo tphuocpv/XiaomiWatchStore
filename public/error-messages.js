@@ -10,6 +10,9 @@ export function vietnameseError(error, fallback = vietnameseFallback) {
   if (/insufficient funds|not enough funds|funds for gas/i.test(message)) {
     return "Ví không đủ ETH thử nghiệm để trả phí giao dịch.";
   }
+  if (/nonce too high|nonce too low|nonce has already been used|expected nonce/i.test(message)) {
+    return "MetaMask đang lưu số thứ tự giao dịch cũ cho mạng thử nghiệm. Hãy xóa dữ liệu hoạt động và nonce của LabChain Local rồi thử lại.";
+  }
   if (/could not coalesce|internal json-rpc error|unknown rpc error/i.test(message)) {
     return "MetaMask chưa xử lý được giao dịch. Vui lòng kiểm tra ví và mạng blockchain đang kết nối.";
   }
