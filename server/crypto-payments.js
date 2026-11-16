@@ -53,7 +53,7 @@ export async function loadCryptoDeployment(fileUrl) {
   try {
     deployment = JSON.parse(await readFile(fileUrl, "utf8"));
   } catch {
-    throw new CryptoTransactionError("Chưa triển khai hợp đồng thanh toán local. Hãy chạy deploy:local.");
+    throw new CryptoTransactionError("Thanh toán bằng ETH hiện chưa khả dụng. Vui lòng thử lại sau.");
   }
   if (Number(deployment.chainId) !== chainId || !deployment.escrow?.address || !Array.isArray(deployment.escrow?.abi)) {
     throw new CryptoTransactionError("Cấu hình hợp đồng thanh toán chưa đúng mạng LabChain Local.");
@@ -74,9 +74,9 @@ export async function verifyEscrowTransaction({ provider, deployment, txHash, or
     throw new CryptoTransactionError("Mã giao dịch không hợp lệ.");
   }
   const activeChainId = Number(await provider.send("eth_chainId", []));
-  if (activeChainId !== chainId) throw new CryptoTransactionError("Máy chủ blockchain không ở Chain ID 31337.");
+  if (activeChainId !== chainId) throw new CryptoTransactionError("Không thể xác minh giao dịch trên mạng đang kết nối.");
   if (await provider.getCode(deployment.escrow.address) === "0x") {
-    throw new CryptoTransactionError("Không tìm thấy hợp đồng thanh toán trên mạng local. Hãy chạy lại deploy:local.");
+    throw new CryptoTransactionError("Chưa kết nối được hợp đồng thanh toán.");
   }
 
   const transaction = await provider.getTransaction(txHash);

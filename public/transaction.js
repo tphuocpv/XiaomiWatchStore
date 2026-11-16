@@ -81,7 +81,7 @@ function showInputError(message) {
 }
 
 async function loadTransaction(hash) {
-  showMessage("Đang đọc giao dịch từ LabChain Local…");
+  showMessage("Đang tra cứu giao dịch…");
   try {
     const response = await fetch(`/api/admin/blockchain/transactions/${hash}`, {
       credentials: "same-origin", cache: "no-store",

@@ -146,15 +146,13 @@
       <div class="dialog-card checkout-card">
         <button class="close-button dialog-close" type="button" aria-label="Đóng">×</button>
         <div class="checkout-heading">
-          <p class="eyebrow">THÔNG TIN GIAO HÀNG</p>
           <h2 id="checkout-title">Hoàn tất đơn hàng</h2>
-          <p>Kiểm tra thông tin nhận hàng và chọn cách thanh toán phù hợp.</p>
+          <p>Kiểm tra địa chỉ giao hàng và phương thức thanh toán.</p>
         </div>
         <form id="checkout-form" class="form-stack checkout-form">
           <section class="checkout-section" aria-labelledby="recipient-title">
             <div class="checkout-section-heading">
-              <span class="checkout-step">01</span>
-              <div><h3 id="recipient-title">Người nhận</h3><p>Thông tin lấy từ tài khoản của bạn; có thể chỉnh riêng cho đơn hàng này.</p></div>
+              <div><h3 id="recipient-title">Thông tin người nhận</h3><p>Bạn có thể thay đổi thông tin giao hàng riêng cho đơn này.</p></div>
             </div>
             <div class="recipient-fields">
               <label class="field-label">Họ và tên<input name="shippingName" required maxlength="120" autocomplete="name" placeholder="Tên người nhận"></label>
@@ -164,28 +162,24 @@
           </section>
           <section class="checkout-section checkout-payment-section" aria-labelledby="payment-title">
             <div class="checkout-section-heading">
-              <span class="checkout-step">02</span>
-              <div><h3 id="payment-title">Thanh toán</h3><p>Chọn phương thức bạn muốn sử dụng.</p></div>
+              <div><h3 id="payment-title">Phương thức thanh toán</h3></div>
             </div>
             <fieldset class="payment-options">
               <legend class="visually-hidden">Phương thức thanh toán</legend>
               <label class="payment-choice">
                 <input type="radio" name="paymentMethod" value="cod" checked>
-                <span class="payment-choice-copy"><strong>Thanh toán khi nhận hàng</strong><small>Trả tiền trực tiếp khi đơn được giao</small></span>
-                <span class="payment-tag">COD</span>
+                <span class="payment-choice-copy"><strong>Thanh toán khi nhận hàng</strong><small>Trả tiền trực tiếp cho nhân viên giao hàng</small></span>
               </label>
               <label class="payment-choice">
-                <input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay">
-                <span class="payment-choice-copy"><strong>VNPay</strong><small>Thanh toán thử nghiệm, không thu tiền thật</small></span>
-                <span class="payment-tag payment-tag-test">Sandbox</span>
+                <input id="vnpay-option" type="radio" name="paymentMethod" value="vnpay" disabled>
+                <span class="payment-choice-copy"><strong>VNPay</strong><small>Hoàn tất thanh toán trên cổng VNPay</small></span>
               </label>
               <label class="payment-choice">
                 <input id="crypto-option" type="radio" name="paymentMethod" value="crypto">
-                <span class="payment-choice-copy"><strong>Ví MetaMask (ETH)</strong><small>ETH thử nghiệm trên LabChain Local</small></span>
-                <span class="payment-tag payment-tag-test">Thử nghiệm</span>
+                <span class="payment-choice-copy"><strong>Ví MetaMask (ETH)</strong><small>Xác nhận giao dịch trong ví của bạn</small></span>
               </label>
               <p class="payment-note" id="vnpay-availability" role="status" hidden></p>
-              <p class="payment-note" id="crypto-availability" role="status" hidden>MetaMask sẽ mở yêu cầu xác nhận khi bạn đặt đơn.</p>
+              <p class="payment-note" id="crypto-availability" role="status" hidden></p>
             </fieldset>
           </section>
           <p class="form-message" id="checkout-message" role="status"></p>

@@ -324,7 +324,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
     const cryptoAmountWei = paymentMethod === "crypto" ? quoteCryptoWei(subtotal) : null;
     const createdAt = new Date();
     if (paymentMethod === "vnpay" && subtotal < 5000) {
-      throw Object.assign(new Error("VNPay sandbox yêu cầu thanh toán tối thiểu 5.000 ₫."), { status: 400 });
+      throw Object.assign(new Error("VNPay yêu cầu thanh toán tối thiểu 5.000 ₫."), { status: 400 });
     }
     const orderKey = keccak256(toUtf8Bytes(orderCode));
     const digestPayload = JSON.stringify({
@@ -454,7 +454,7 @@ app.post("/api/orders/:id/payments/crypto/retry", requireUser, async (request, r
     );
     const order = rows[0];
     if (!order) return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
-    if (order.paymentMethod !== "crypto") return response.status(409).json({ error: "Đơn hàng này không sử dụng ETH thử nghiệm." });
+    if (order.paymentMethod !== "crypto") return response.status(409).json({ error: "Đơn hàng này không dùng phương thức thanh toán ETH." });
     if (!['unpaid', 'failed'].includes(order.paymentStatus) || order.cryptoStatus !== "unpaid"
         || ["cancelled", "shipped", "delivered"].includes(order.orderStatus) || order.cancellationRequestedAt) {
       return response.status(409).json({ error: "Đơn hàng hiện không thể thanh toán lại." });
@@ -463,7 +463,7 @@ app.post("/api/orders/:id/payments/crypto/retry", requireUser, async (request, r
     provider = new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
     if (Number(await provider.send("eth_chainId", [])) !== chainId
         || await provider.getCode(deployment.escrow.address) === "0x") {
-      return response.status(503).json({ error: "Không tìm thấy hợp đồng thanh toán trên LabChain Local. Hãy khởi động mạng và chạy deploy:local." });
+      return response.status(503).json({ error: "Thanh toán bằng ETH hiện chưa khả dụng. Vui lòng thử lại sau." });
     }
     const deadline = Math.floor(Date.now() / 1000) + 30 * 60;
     const quote = await signCryptoQuote({
@@ -475,8 +475,8 @@ app.post("/api/orders/:id/payments/crypto/retry", requireUser, async (request, r
       amountWei: order.amountWei, amountEth: formatCryptoWei(order.amountWei),
       chainId, contractAddress: deployment.escrow.address, signature: quote.signature, deadline: quote.deadline,
     });
-  } catch (error) {
-    response.status(503).json({ error: error.message || "Chưa tạo được yêu cầu thanh toán ETH. Kiểm tra mạng local." });
+  } catch {
+    response.status(503).json({ error: "Chưa mở được thanh toán ETH. Vui lòng thử lại sau." });
   } finally {
     provider?.destroy();
   }
@@ -496,7 +496,7 @@ app.post("/api/orders/:id/payments/crypto/confirm", requireUser, async (request,
        WHERE o.id = ? AND o.user_id = ? AND o.payment_method = 'crypto' LIMIT 1`, [id, request.session.user.id],
     );
     const order = rows[0];
-    if (!order) return response.status(404).json({ error: "Không tìm thấy đơn ETH thử nghiệm." });
+    if (!order) return response.status(404).json({ error: "Không tìm thấy đơn hàng thanh toán bằng ETH." });
     if (order.paymentStatus === "paid" && order.paymentTxHash?.toLowerCase() === txHash.toLowerCase()) {
       return response.json({ ok: true, txHash, alreadyConfirmed: true });
     }
@@ -513,7 +513,8 @@ app.post("/api/orders/:id/payments/crypto/confirm", requireUser, async (request,
     response.json({ ok: true, txHash, alreadyConfirmed });
   } catch (error) {
     const status = error.status ?? (error instanceof CryptoTransactionError ? 400 : 503);
-    response.status(status).json({ error: error.message || "Chưa xác minh được thanh toán trên mạng local.", code: status === 400 ? error.code : undefined });
+    const message = status < 500 ? error.message : "Chưa xác minh được thanh toán ETH. Vui lòng thử lại sau.";
+    response.status(status).json({ error: message, code: status === 400 ? error.code : undefined });
   } finally {
     provider?.destroy();
   }
@@ -708,7 +709,7 @@ app.get("/api/admin/blockchain/transactions/:hash", requireUser, requireAdmin, a
     }
     response.json({ transaction });
   } catch {
-    response.status(503).json({ error: "Chưa đọc được giao dịch. Hãy kiểm tra xem Hardhat đang chạy trên LabChain Local rồi thử lại." });
+    response.status(503).json({ error: "Chưa đọc được giao dịch trên blockchain. Vui lòng thử lại sau." });
   }
 });
 
@@ -903,7 +904,7 @@ async function writeEscrowAction(order, method) {
   try { return await recordEscrowAction(order, method); }
   catch (error) {
     const message = /[À-ỹ]/u.test(error.message)
-      ? error.message : "Chưa tự động xử lý được giao dịch ETH. Hãy kiểm tra Hardhat rồi thử lại.";
+      ? error.message : "Chưa xử lý được giao dịch ETH. Kiểm tra kết nối blockchain rồi thử lại.";
     throw Object.assign(new Error(message), { status: 503 });
   }
 }

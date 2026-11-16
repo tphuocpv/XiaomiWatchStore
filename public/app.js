@@ -411,7 +411,7 @@ async function loadOrders({ recoverCryptoPayments = true } = {}) {
       if (order.paymentMethod === "crypto" && order.cryptoAmountWei && window.ethers) {
         const quote = document.createElement("small");
         quote.className = "order-action-note";
-        quote.textContent = `Số tiền: ${window.ethers.formatEther(order.cryptoAmountWei)} ETH thử nghiệm`;
+        quote.textContent = `Số tiền: ${window.ethers.formatEther(order.cryptoAmountWei).replace(".", ",")} ETH`;
         card.append(quote);
       }
       const items = document.createElement("ul");
@@ -520,7 +520,7 @@ async function payCryptoOrder(order, button) {
     accountMessage.textContent = "Đang xác minh giao dịch ETH…";
     await confirmCryptoPayment(order.id, txHash);
     accountMessage.textContent = "";
-    showToast({ title: `Đã thanh toán đơn ${order.orderCode} bằng ETH thử nghiệm.` });
+    showToast({ title: `Đã thanh toán đơn ${order.orderCode} bằng ETH.` });
   } catch (error) {
     if (error.code === "LOCAL_TX_REVERTED") localStorage.removeItem(storageKey);
     const message = vietnameseError(error, "Chưa hoàn tất thanh toán. Đơn vẫn được lưu để bạn thử lại.");
@@ -566,24 +566,26 @@ async function loadPaymentOptions() {
     const status = await response.json();
     const configured = status.vnpaySandboxConfigured === true;
     option.disabled = !configured;
-    if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
     if (status.cryptoEthVndRate) {
       const rate = new Intl.NumberFormat("vi-VN").format(Number(status.cryptoEthVndRate));
-      $("#crypto-availability").textContent = `Tỷ giá thử nghiệm 1 ETH = ${rate} ₫. MetaMask sẽ mở yêu cầu xác nhận khi bạn đặt đơn.`;
+      $("#crypto-availability").textContent = `Tỷ giá quy đổi của cửa hàng: 1 ETH = ${rate} ₫.`;
     }
-    note.textContent = configured
-      ? "Giao dịch được xử lý trong môi trường thử nghiệm, không phát sinh khoản thu thực."
-      : "Thanh toán VNPay hiện chưa khả dụng. Bạn có thể chọn thanh toán khi nhận hàng.";
+    note.textContent = configured ? "" : "VNPay hiện chưa khả dụng. Vui lòng chọn phương thức khác.";
   } catch {
     option.disabled = true;
-    note.textContent = "Không thể kiểm tra VNPay lúc này. Vui lòng chọn thanh toán khi nhận hàng.";
+    note.textContent = "VNPay hiện chưa khả dụng. Vui lòng chọn phương thức khác.";
+  } finally {
+    if (option.disabled && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
+    updatePaymentNotes();
   }
 }
 
 function updatePaymentNotes() {
   const selected = $("input[name=paymentMethod]:checked")?.value;
-  $("#vnpay-availability").hidden = selected !== "vnpay";
-  $("#crypto-availability").hidden = selected !== "crypto";
+  const vnpayNote = $("#vnpay-availability");
+  const cryptoNote = $("#crypto-availability");
+  vnpayNote.hidden = !vnpayNote.textContent;
+  cryptoNote.hidden = selected !== "crypto" || !cryptoNote.textContent;
 }
 
 async function submitAuth(form, endpoint) {

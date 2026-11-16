@@ -11,7 +11,7 @@ const escrowEvents = {
   refundOrder: "OrderRefunded",
   cancelUnpaidOrder: "OrderCancelled",
 };
-const unavailable = "Chưa thể ghi blockchain tự động. Hãy kiểm tra Hardhat và triển khai hợp đồng local.";
+const unavailable = "Chưa kết nối được blockchain. Hệ thống sẽ tự thử lại.";
 let lastEpoch;
 let buyerSyncBlock;
 let automationStatus = { ready: false, message: unavailable };

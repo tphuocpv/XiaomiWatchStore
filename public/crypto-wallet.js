@@ -1,9 +1,9 @@
 async function readDeployment() {
   const response = await fetch("/deployment.json", { cache: "no-store" });
-  if (!response.ok) throw new Error("Chưa tìm thấy hợp đồng thanh toán. Hãy chạy bước triển khai local.");
+  if (!response.ok) throw new Error("Thanh toán bằng ETH hiện chưa khả dụng. Vui lòng thử lại sau.");
   const deployment = await response.json();
   if (!deployment.escrow?.address || !Array.isArray(deployment.escrow?.abi)) {
-    throw new Error("Hợp đồng escrow chưa được triển khai. Hãy chạy deploy:local.");
+    throw new Error("Thanh toán bằng ETH hiện chưa khả dụng. Vui lòng thử lại sau.");
   }
   return deployment;
 }
@@ -25,7 +25,7 @@ async function connectLocalWallet() {
       if (error.code !== 4902 && error.data?.originalError?.code !== 4902) throw error;
       await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
         chainId: localChainId, chainName: "LabChain Local", rpcUrls: ["http://127.0.0.1:8545"],
-        nativeCurrency: { name: "Ether thử nghiệm", symbol: "ETH", decimals: 18 },
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
       }] });
       if (await window.ethereum.request({ method: "eth_chainId" }) !== localChainId) {
         await window.ethereum.request({ method: "wallet_switchEthereumChain", params: switchParams });
@@ -43,11 +43,11 @@ async function sendLocalTransaction({ from, to, abi, method, args, value, onSubm
   if (sendingTransaction) throw new Error("Hãy xử lý giao dịch đang mở trong MetaMask trước.");
   sendingTransaction = true;
   try {
-    if (!window.ethers) throw new Error("Thư viện ví chưa tải xong. Hãy tải lại trang rồi thử lại.");
+    if (!window.ethers) throw new Error("Chưa thể mở ví. Hãy tải lại trang rồi thử lại.");
     const chain = await window.ethereum.request({ method: "eth_chainId" });
     if (chain !== localChainId) throw new Error("Hãy chuyển MetaMask sang mạng LabChain Local (Chain ID 31337).");
     const code = await window.ethereum.request({ method: "eth_getCode", params: [to, "latest"] });
-    if (!code || code === "0x") throw new Error("Không tìm thấy hợp đồng trên mạng LabChain Local. Hãy chạy lại deploy:local.");
+    if (!code || code === "0x") throw new Error("Thanh toán bằng ETH hiện chưa khả dụng. Vui lòng thử lại sau.");
     const data = new window.ethers.Interface(abi).encodeFunctionData(method, args);
     // Hardhat mines immediately. The latest block gives the nonce even if MetaMask kept older activity.
     const nonce = await window.ethereum.request({ method: "eth_getTransactionCount", params: [from, "latest"] });

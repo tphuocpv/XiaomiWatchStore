@@ -71,7 +71,7 @@ function showBlockchainAutomation(automation) {
   $("#blockchain-panel").hidden = false;
   $("#blockchain-status").textContent = automation?.message ?? (automation?.ready
     ? "MiTime tự động ghi trạng thái đơn lên blockchain."
-    : "Dịch vụ blockchain chưa sẵn sàng. Kiểm tra mạng thử nghiệm và cấu hình máy chủ.");
+    : "Blockchain hiện chưa kết nối. Kiểm tra dịch vụ rồi tải lại trang.");
 }
 
 function scheduleOrderProofRefresh(orders, revision) {
@@ -227,7 +227,7 @@ function renderOrder(order) {
   heading.textContent = `${order.orderCode} · ${currency.format(Number(order.totalVnd))}`;
   const details = document.createElement("p");
   const paymentLabels = { unpaid: "Chưa thanh toán", paid: "Đã thanh toán", failed: "Thanh toán lỗi", refunded: "Đã hoàn tiền" };
-  const paymentMethodLabels = { cod: "Thanh toán khi nhận", vnpay: "VNPay (thử nghiệm)", crypto: "ETH qua MetaMask" };
+  const paymentMethodLabels = { cod: "Thanh toán khi nhận", vnpay: "VNPay", crypto: "ETH qua MetaMask" };
   details.textContent = `${new Date(order.createdAt).toLocaleString("vi-VN")} · ${paymentMethodLabels[order.paymentMethod] || "Chưa rõ phương thức"} · ${paymentLabels[order.paymentStatus] || "Chưa cập nhật"}`;
   description.append(heading, details);
   const current = document.createElement("span");
@@ -336,7 +336,7 @@ function renderOrder(order) {
     const warning = document.createElement("strong");
     warning.textContent = "VNPay báo thanh toán thành công sau khi đơn đã hủy";
     const note = document.createElement("small");
-    note.textContent = "Hãy hoàn tiền trên cổng VNPay Sandbox trước, sau đó xác nhận để cập nhật sổ đơn hàng.";
+    note.textContent = "Hoàn tiền trên cổng VNPay trước khi xác nhận ở đây.";
     const refundActions = document.createElement("div");
     refundActions.className = "order-cancellation-actions";
     const refund = document.createElement("button");
@@ -346,7 +346,7 @@ function renderOrder(order) {
     refund.addEventListener("click", async () => {
       if (!await confirmAction({
         title: "Xác nhận đã hoàn tiền VNPay?",
-        text: "Chỉ tiếp tục sau khi khoản tiền đã được hoàn trên VNPay Sandbox. MiTime sẽ cập nhật trạng thái đối soát.",
+        text: "Sau khi hoàn tiền trên cổng VNPay, xác nhận tại đây để cập nhật trạng thái đơn.",
         confirmText: "Đã hoàn tiền",
       })) return;
       refund.disabled = true;
@@ -400,7 +400,7 @@ function renderOrderProof(order) {
   };
   const proofMessages = {
     missing: "Giao dịch đã lưu không còn trên mạng hiện tại.",
-    unavailable: "Chưa thể đối chiếu giao dịch trên mạng thử nghiệm.",
+    unavailable: "Chưa thể đối chiếu giao dịch trên blockchain.",
   };
   proofText.textContent = recorded
     ? `Đã ghi nhận trạng thái “${orderStates[currentCode - 1]?.[1]}” trên blockchain.`
@@ -414,7 +414,7 @@ function renderOrderProof(order) {
   }
   if (order.paymentMethod === "crypto") {
     const cryptoDetails = document.createElement("small");
-    const amountEth = order.cryptoAmountWei && window.ethers ? window.ethers.formatEther(order.cryptoAmountWei) : "chưa có báo giá";
+    const amountEth = order.cryptoAmountWei && window.ethers ? window.ethers.formatEther(order.cryptoAmountWei).replace(".", ",") : null;
     const escrowLabels = {
       unpaid: "Chờ thanh toán",
       escrowed: "Hợp đồng đang giữ ETH",
@@ -423,7 +423,8 @@ function renderOrderProof(order) {
       refunded: "Đã hoàn ETH",
       cancelled: "Đã khóa thanh toán",
     };
-    cryptoDetails.textContent = `${escrowLabels[order.cryptoStatus] ?? "Chưa có trạng thái thanh toán ETH"} · ${amountEth} ETH thử nghiệm`;
+    const label = escrowLabels[order.cryptoStatus] ?? "Chưa có trạng thái thanh toán ETH";
+    cryptoDetails.textContent = amountEth ? `${label} · ${amountEth} ETH` : label;
     proof.append(cryptoDetails);
     for (const [label, hash] of [
       ["Thanh toán", order.cryptoPaymentTxHash],

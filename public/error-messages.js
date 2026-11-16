@@ -10,7 +10,7 @@ export function vietnameseError(error, fallback = vietnameseFallback) {
     return "Bạn đã từ chối yêu cầu trong MetaMask.";
   }
   if (/insufficient funds|not enough funds|funds for gas/i.test(details)) {
-    return "Ví không đủ ETH thử nghiệm để trả phí giao dịch.";
+    return "Ví không đủ ETH để thanh toán và trả phí giao dịch.";
   }
   if (/nonce too high|nonce too low|nonce has already been used|expected nonce/i.test(details)) {
     return "Số thứ tự giao dịch đã lệch với LabChain Local. Hãy đóng yêu cầu cũ trong MetaMask và bấm thử lại để lấy số mới.";
