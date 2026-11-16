@@ -5,9 +5,10 @@ import { chainId } from "../local-network.js";
 const hashPattern = /^0x[a-fA-F0-9]{64}$/;
 
 export class CryptoTransactionError extends Error {
-  constructor(message) {
+  constructor(message, code) {
     super(message);
     this.name = "CryptoTransactionError";
+    this.code = code;
   }
 }
 
@@ -59,6 +60,7 @@ export async function loadCryptoDeployment(fileUrl) {
   }
   try {
     deployment.admin = getAddress(deployment.admin);
+    deployment.merchant = getAddress(deployment.merchant ?? deployment.admin);
     deployment.escrow.address = getAddress(deployment.escrow.address);
     deployment.quoteSigner = getAddress(deployment.quoteSigner);
   } catch {
@@ -79,6 +81,9 @@ export async function verifyEscrowTransaction({ provider, deployment, txHash, or
 
   const transaction = await provider.getTransaction(txHash);
   const receipt = await provider.getTransactionReceipt(txHash);
+  if (methodName === "payOrder" && (!transaction && !receipt || receipt?.status === 0)) {
+    throw new CryptoTransactionError("Giao dịch cũ không thành công hoặc không còn trên LabChain Local. Bấm thanh toán lại để tạo yêu cầu mới.", "CRYPTO_TX_RETRYABLE");
+  }
   if (!transaction || !receipt || receipt.status !== 1
       || transaction.to?.toLowerCase() !== deployment.escrow.address.toLowerCase()) {
     throw new CryptoTransactionError("Giao dịch chưa xác nhận hoặc không gọi đúng hợp đồng thanh toán.");
@@ -102,7 +107,7 @@ export async function verifyEscrowTransaction({ provider, deployment, txHash, or
       throw new CryptoTransactionError("Số ETH hoặc mã băm hóa đơn không khớp với đơn hàng.");
     }
     const deadline = BigInt(parsed.args[3]);
-    if (BigInt(Math.floor(Date.now() / 1000)) > deadline) throw new CryptoTransactionError("Báo giá thanh toán đã hết hạn. Hãy tạo yêu cầu thanh toán mới.");
+    // payOrder enforces expiry at the time of mining; syncing can happen later.
     const quoteHash = keccak256(AbiCoder.defaultAbiCoder().encode(
       ["bytes32", "bytes32", "uint256", "uint256", "uint256", "address"],
       [order.blockchainKey, order.blockchainDigest, amountWei, deadline, chainId, deployment.escrow.address],
@@ -123,6 +128,7 @@ export async function verifyEscrowTransaction({ provider, deployment, txHash, or
   }[methodName];
   let eventArgs = null;
   for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== deployment.escrow.address.toLowerCase()) continue;
     try {
       const event = iface.parseLog(log);
       if (event?.name === eventName && event.args.orderKey.toLowerCase() === order.blockchainKey.toLowerCase()) {
@@ -142,7 +148,7 @@ export async function verifyEscrowTransaction({ provider, deployment, txHash, or
     }
     return { buyerAddress: buyer, txHash };
   }
-  if (methodName === "releaseOrder" && (eventArgs.merchant.toLowerCase() !== deployment.admin.toLowerCase()
+  if (methodName === "releaseOrder" && (eventArgs.merchant.toLowerCase() !== (deployment.merchant ?? deployment.admin).toLowerCase()
       || BigInt(eventArgs.amount) !== BigInt(amountWei))) {
     throw new CryptoTransactionError("Sự kiện giải ngân không khớp số tiền escrow.");
   }

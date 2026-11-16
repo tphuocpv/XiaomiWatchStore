@@ -12,10 +12,10 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 - Nếu VNPay xác nhận tiền sau khi đơn đã hủy, trang quản trị báo cần đối soát; admin hoàn giao dịch trên VNPay Sandbox rồi ghi nhận kết quả trong MiTime.
 - Khách hàng có thể thanh toán bằng ETH thử nghiệm qua MetaMask; hợp đồng giữ khoản tiền đến khi đơn giao thành công.
 - Khi đơn bị hủy trước lúc giao, hợp đồng hoàn ETH cho khách; khi chuyển sang đang giao, hợp đồng khóa khả năng hoàn tiền.
-- Admin dùng MetaMask để giải ngân cho cửa hàng sau khi giao hàng và hoàn tiền khi duyệt hủy.
+- MiTime tự gửi giao dịch giải ngân khi admin lưu trạng thái Đã giao và tự hoàn ETH khi admin duyệt hủy.
 - SweetAlert2 hiển thị hộp thoại xác nhận và thông báo trạng thái cho các thao tác quan trọng.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
-- MetaMask xác nhận giao dịch ghi bằng chứng đơn hàng lên blockchain.
+- Máy chủ tự ghi mã băm và trạng thái đơn lên blockchain. Các bản ghi chờ sẽ được gửi lại khi Hardhat sẵn sàng.
 - Máy chủ kiểm tra giá và tồn kho trước khi tạo đơn; hệ thống không lưu thông tin thẻ.
 - Giao diện và thông báo lỗi bằng tiếng Việt.
 
@@ -54,7 +54,7 @@ Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Eth
    .\npm-local.cmd run chain
    ```
 
-2. Mở cửa sổ PowerShell thứ ba, sau đó nhập địa chỉ công khai của ví quản trị:
+2. Mở cửa sổ PowerShell thứ ba. Nếu cần chỉ định ví nhận tiền của cửa hàng, chạy lệnh sau rồi nhập địa chỉ công khai của ví. Mặc định, hợp đồng dùng tài khoản đầu tiên của Hardhat làm ví nhận tiền.
 
    ```powershell
    .\npm-local.cmd run configure:wallet
@@ -68,9 +68,12 @@ Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Eth
    .\npm-local.cmd run deploy:local
    ```
 
-4. Thêm mạng **LabChain Local** vào MetaMask với RPC `http://127.0.0.1:8545`, Chain ID `31337` và ký hiệu tiền tệ `ETH`. Dùng các tài khoản test do Hardhat tạo; chỉ dùng chúng trên mạng local. Đăng nhập quản trị tại <http://127.0.0.1:3000/admin.html>, kết nối MetaMask và xác nhận giao dịch khi được yêu cầu.
+4. Khởi động lại web nếu vừa chạy `setup` trong lúc web đang mở. Khi khách chọn **Ví MetaMask (ETH)**, trang mở yêu cầu thanh toán ngay sau khi đặt hàng. Lần đầu, khách có thể cần cho phép kết nối và chọn mạng **LabChain Local** với RPC `http://127.0.0.1:8545`, Chain ID `31337` và ký hiệu `ETH`. Khách xác nhận khoản chi trong MetaMask.
+5. Admin thao tác đơn như bình thường tại <http://127.0.0.1:3000/admin.html>. Ví dịch vụ đã được Hardhat cấp ETH thử nghiệm để ký giao dịch và trả phí. Khoản giải ngân đi tới ví nhận tiền của cửa hàng.
 
-Giữ cửa sổ Hardhat mở trong khi trình diễn. Máy chủ ký báo giá ETH bằng khóa ngẫu nhiên chỉ lưu trong .env; hợp đồng kiểm tra chữ ký và số tiền trước khi nhận. Hợp đồng chỉ lưu mã băm đơn hàng/hóa đơn, ví thanh toán, số ETH thử nghiệm và trạng thái escrow; không lưu tên, địa chỉ hoặc số điện thoại khách hàng.
+Chọn **Tra cứu mã giao dịch** trong trang quản trị hoặc mở mã giao dịch trên một đơn để xem chi tiết trực tiếp từ Hardhat. Trang cho biết số ETH thực chuyển, địa chỉ gửi và nhận tiền, block và phí gas.
+
+Giữ cửa sổ Hardhat mở trong khi trình diễn. Khóa ví tự động và khóa ký báo giá được `setup` tạo trong `.env`. Ví tự động chỉ hoạt động trên Hardhat cục bộ. Khi nâng cấp hợp đồng đang giữ ETH, hãy xử lý xong các đơn đó trên hợp đồng cũ trước khi triển khai lại. Hợp đồng chỉ lưu mã băm đơn hàng/hóa đơn, ví thanh toán, số ETH thử nghiệm và trạng thái escrow. Tên, địa chỉ và số điện thoại khách hàng được giữ trong MySQL.
 
 ## Chia việc cho hai thành viên
 

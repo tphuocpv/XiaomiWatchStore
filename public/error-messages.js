@@ -2,17 +2,20 @@ const vietnameseFallback = "Đã xảy ra lỗi. Vui lòng thử lại.";
 
 export function vietnameseError(error, fallback = vietnameseFallback) {
   const message = typeof error === "string" ? error : String(error?.shortMessage || error?.message || "");
+  const details = [message, error?.message, error?.cause?.message, error?.data?.message,
+    error?.data?.originalError?.message, error?.info?.error?.message, error?.info?.error?.data?.originalError?.message]
+    .filter(Boolean).join(" ");
   if (!message) return fallback;
-  if (/[À-ỹ]/u.test(message)) return message;
-  if (/user rejected|user denied|rejected the request|action_rejected|code\s*4001/i.test(message)) {
+  if (/user rejected|user denied|rejected the request|action_rejected|code\s*4001/i.test(details) || error?.code === 4001) {
     return "Bạn đã từ chối yêu cầu trong MetaMask.";
   }
-  if (/insufficient funds|not enough funds|funds for gas/i.test(message)) {
+  if (/insufficient funds|not enough funds|funds for gas/i.test(details)) {
     return "Ví không đủ ETH thử nghiệm để trả phí giao dịch.";
   }
-  if (/nonce too high|nonce too low|nonce has already been used|expected nonce/i.test(message)) {
-    return "MetaMask đang lưu số thứ tự giao dịch cũ cho mạng thử nghiệm. Hãy xóa dữ liệu hoạt động và nonce của LabChain Local rồi thử lại.";
+  if (/nonce too high|nonce too low|nonce has already been used|expected nonce/i.test(details)) {
+    return "Số thứ tự giao dịch đã lệch với LabChain Local. Hãy đóng yêu cầu cũ trong MetaMask và bấm thử lại để lấy số mới.";
   }
+  if (/[À-ỹ]/u.test(message)) return message;
   if (/could not coalesce|internal json-rpc error|unknown rpc error/i.test(message)) {
     return "MetaMask chưa xử lý được giao dịch. Vui lòng kiểm tra ví và mạng blockchain đang kết nối.";
   }

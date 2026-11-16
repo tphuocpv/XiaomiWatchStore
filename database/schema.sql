@@ -117,3 +117,16 @@ CREATE TABLE IF NOT EXISTS crypto_payments (
   UNIQUE KEY uq_crypto_cancel_tx (cancel_tx_hash),
   CONSTRAINT fk_crypto_payment_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS blockchain_order_jobs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  order_id BIGINT UNSIGNED NOT NULL,
+  order_status TINYINT UNSIGNED NOT NULL,
+  tx_hash CHAR(66) NULL,
+  registry_epoch CHAR(66) NULL,
+  retry_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  attempts SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_chain_job_status (order_id, order_status),
+  KEY idx_chain_job_retry (tx_hash, retry_at, id),
+  CONSTRAINT fk_chain_job_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB;

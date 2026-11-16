@@ -7,17 +7,18 @@ import helmet from "helmet";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { Interface, JsonRpcProvider, keccak256, toUtf8Bytes } from "ethers";
+import { FetchRequest, Interface, JsonRpcProvider, keccak256, toUtf8Bytes } from "ethers";
 import { chainId, rpcUrl } from "../local-network.js";
 import { pool } from "./db.js";
 import { CryptoTransactionError, cryptoExchangeRate, formatCryptoWei, loadCryptoDeployment, quoteCryptoWei, signCryptoQuote, verifyEscrowTransaction } from "./crypto-payments.js";
+import { canDeclineEscrowCancellation, enqueueOrderProof, getBlockchainAutomationStatus, orderStatusCode, persistEscrowPayment, recordEscrowAction, startBlockchainAutomation } from "./blockchain-automation.js";
+import { readBlockchainTransaction } from "./blockchain-transactions.js";
 import { createVnpayUrl, hasVnpayCredentials, verifyVnpayQuery } from "./vnpay.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const sessionSecret = process.env.SESSION_SECRET;
 const deploymentFile = new URL("../public/deployment.json", import.meta.url);
-const orderStatusCode = { pending: 1, confirmed: 2, packing: 3, shipped: 4, delivered: 5, cancelled: 6 };
 const allowedOrderStatuses = new Set(Object.keys(orderStatusCode));
 const orderTransitions = {
   pending: new Set(["pending", "confirmed", "cancelled"]),
@@ -148,6 +149,7 @@ async function applyVnpayResult(search) {
       await connection.execute(
         "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE id = ?", [order.id],
       );
+      if (locked.orderStatus !== "cancelled") await enqueueOrderProof(connection, order.id, "confirmed");
     } else {
       await connection.execute("UPDATE orders SET payment_status = 'failed' WHERE id = ?", [order.id]);
     }
@@ -346,6 +348,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
         [insert.insertId, item.productId, item.productName, item.unitPrice, item.quantity],
       );
     }
+    await enqueueOrderProof(connection, insert.insertId, "pending");
     if (paymentMethod === "crypto") {
       await connection.execute(
         "INSERT INTO crypto_payments (order_id, chain_id, amount_wei) VALUES (?, ?, ?)",
@@ -506,48 +509,11 @@ app.post("/api/orders/:id/payments/crypto/confirm", requireUser, async (request,
     const payment = await verifyEscrowTransaction({
       provider, deployment, txHash, order, methodName: "payOrder", amountWei: order.amountWei,
     });
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const [lockedRows] = await connection.execute(
-        `SELECT o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-          cp.status AS cryptoStatus, cp.payment_tx_hash AS paymentTxHash
-         FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id
-         WHERE o.id = ? AND o.user_id = ? FOR UPDATE`, [id, request.session.user.id],
-      );
-      const locked = lockedRows[0];
-      if (!locked) {
-        await connection.rollback();
-        return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
-      }
-      if (locked.paymentStatus === "paid" && locked.paymentTxHash?.toLowerCase() === txHash.toLowerCase()) {
-        await connection.commit();
-        return response.json({ ok: true, txHash, alreadyConfirmed: true });
-      }
-      if (locked.paymentStatus !== "unpaid" || locked.cryptoStatus !== "unpaid"
-          || ["cancelled", "shipped", "delivered"].includes(locked.orderStatus)) {
-        await connection.rollback();
-        return response.status(409).json({ error: "Đơn hàng đã thay đổi trạng thái trước khi xác nhận thanh toán." });
-      }
-      await connection.execute(
-        "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'pending' THEN 'confirmed' ELSE order_status END WHERE id = ?",
-        [id],
-      );
-      await connection.execute(
-        "UPDATE crypto_payments SET status = 'escrowed', buyer_address = ?, payment_tx_hash = ? WHERE order_id = ?",
-        [payment.buyerAddress, txHash, id],
-      );
-      await connection.commit();
-    } catch (error) {
-      await connection.rollback();
-      throw error;
-    } finally {
-      connection.release();
-    }
-    response.json({ ok: true, txHash });
+    const { alreadyConfirmed } = await persistEscrowPayment(id, payment);
+    response.json({ ok: true, txHash, alreadyConfirmed });
   } catch (error) {
-    const status = error instanceof CryptoTransactionError ? 400 : 503;
-    response.status(status).json({ error: error.message || "Chưa xác minh được thanh toán trên mạng local." });
+    const status = error.status ?? (error instanceof CryptoTransactionError ? 400 : 503);
+    response.status(status).json({ error: error.message || "Chưa xác minh được thanh toán trên mạng local.", code: status === 400 ? error.code : undefined });
   } finally {
     provider?.destroy();
   }
@@ -624,6 +590,51 @@ async function attachOrderItems(orders) {
   return orders.map((order) => ({ ...order, items: byOrder.get(String(order.id)) ?? [] }));
 }
 
+function registryReceiptMatches(receipt, deployment, iface, order, status) {
+  if (receipt?.status !== 1 || !receipt.to || !order.blockchainKey || !order.blockchainDigest
+      || receipt.to.toLowerCase() !== deployment.address.toLowerCase()
+      || receipt.from.toLowerCase() !== deployment.admin.toLowerCase()) return false;
+  return receipt.logs.some((log) => {
+    if (log.address.toLowerCase() !== receipt.to.toLowerCase()) return false;
+    try {
+      const event = iface.parseLog(log);
+      return event?.name === "OrderAnchored"
+        && event.args.orderKey.toLowerCase() === order.blockchainKey.toLowerCase()
+        && event.args.orderDigest.toLowerCase() === order.blockchainDigest.toLowerCase()
+        && Number(event.args.status) === status;
+    } catch { return false; }
+  });
+}
+
+async function checkStoredOrderProofs(orders) {
+  const anchored = orders.filter((order) => order.blockchainTxHash);
+  if (!anchored.length) return;
+  const rpc = new FetchRequest(rpcUrl);
+  rpc.timeout = 2500;
+  const provider = new JsonRpcProvider(rpc, chainId, { staticNetwork: true });
+  try {
+    const deployment = JSON.parse(await readFile(deploymentFile, "utf8"));
+    const [activeChain, code] = await Promise.all([
+      provider.send("eth_chainId", []), provider.getCode(deployment.address),
+    ]);
+    if (Number(activeChain) !== chainId || code === "0x") throw new Error("Registry unavailable");
+    const iface = new Interface(deployment.abi);
+    await Promise.all(anchored.map(async (order) => {
+      try {
+        const receipt = await provider.getTransactionReceipt(order.blockchainTxHash);
+        order.blockchainProof = registryReceiptMatches(receipt, deployment, iface, order, Number(order.blockchainStatus))
+          ? "verified" : "missing";
+      } catch {
+        order.blockchainProof = "unavailable";
+      }
+    }));
+  } catch {
+    for (const order of anchored) order.blockchainProof = "unavailable";
+  } finally {
+    provider.destroy();
+  }
+}
+
 app.get("/api/payments/vnpay/return", async (request, response) => {
   const { search, valid } = parseVnpayRequest(request);
   const transactionRef = cleanText(search.get("vnp_TxnRef"), 32);
@@ -660,6 +671,9 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
         o.cancellation_requested_at AS cancellationRequestedAt, o.blockchain_key AS blockchainKey,
         o.blockchain_digest AS blockchainDigest, o.blockchain_tx_hash AS blockchainTxHash,
         o.blockchain_status AS blockchainStatus, o.created_at AS createdAt,
+        CASE WHEN j.tx_hash IS NULL AND j.id IS NOT NULL THEN
+          CASE WHEN j.attempts > 0 THEN 'error' ELSE 'pending' END
+        ELSE NULL END AS blockchainSync,
         (SELECT MAX(DATE_ADD(pa.created_at, INTERVAL 15 MINUTE))
          FROM payment_attempts pa
          WHERE pa.order_id = o.id AND pa.provider = 'vnpay' AND pa.response_code IS NULL) AS vnpayPendingUntil,
@@ -669,11 +683,32 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
         cp.refund_tx_hash AS cryptoRefundTxHash,
         cp.cancel_tx_hash AS cryptoCancelTxHash
        FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id
+       LEFT JOIN blockchain_order_jobs j ON j.order_id = o.id
+         AND j.order_status = FIELD(o.order_status, 'pending', 'confirmed', 'packing', 'shipped', 'delivered', 'cancelled')
        ORDER BY o.created_at DESC LIMIT 100`,
     );
-    response.json({ orders: await attachOrderItems(orders) });
+    for (const order of orders) order.nextOrderStatuses = [...orderTransitions[order.orderStatus]];
+    await checkStoredOrderProofs(orders);
+    response.json({ orders: await attachOrderItems(orders), blockchainAutomation: getBlockchainAutomationStatus() });
   } catch {
     response.status(503).json({ error: "Chưa đọc được đơn hàng từ MySQL." });
+  }
+});
+
+app.get("/api/admin/blockchain/transactions/:hash", requireUser, requireAdmin, async (request, response) => {
+  const { hash } = request.params;
+  response.set("Cache-Control", "no-store");
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    return response.status(400).json({ error: "Hãy nhập mã giao dịch đầy đủ, bắt đầu bằng 0x và có 64 ký tự theo sau." });
+  }
+  try {
+    const transaction = await readBlockchainTransaction(hash);
+    if (!transaction) {
+      return response.status(404).json({ error: "Không tìm thấy giao dịch trên LabChain Local hiện tại. Hãy kiểm tra mã và mạng đang dùng." });
+    }
+    response.json({ transaction });
+  } catch {
+    response.status(503).json({ error: "Chưa đọc được giao dịch. Hãy kiểm tra xem Hardhat đang chạy trên LabChain Local rồi thử lại." });
   }
 });
 
@@ -718,101 +753,6 @@ app.patch("/api/admin/users/:id", requireUser, requireAdmin, async (request, res
   }
 });
 
-app.post("/api/admin/orders/:id/payments/crypto/action", requireUser, requireAdmin, async (request, response) => {
-  const id = Number(request.params.id);
-  const action = request.body?.action;
-  const txHash = cleanText(request.body?.txHash, 66);
-  const definitions = {
-    "mark-shipped": { method: "markShipped", targetStatus: "shipped", expectedStatus: "packing", expectedCrypto: "escrowed" },
-    release: { method: "releaseOrder", targetStatus: "released", expectedStatus: "shipped", expectedCrypto: "shipped" },
-    refund: { method: "refundOrder", targetStatus: "refunded", expectedCrypto: "escrowed" },
-    "cancel-unpaid": { method: "cancelUnpaidOrder", targetStatus: "cancelled", expectedCrypto: "unpaid" },
-  };
-  const definition = definitions[action];
-  if (!Number.isSafeInteger(id) || id < 1 || !definition || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-    return response.status(400).json({ error: "Thông tin giao dịch thanh toán ETH chưa hợp lệ." });
-  }
-  const connection = await pool.getConnection();
-  let provider;
-  try {
-    await connection.beginTransaction();
-    const [rows] = await connection.execute(
-      `SELECT o.order_code AS orderCode, o.payment_method AS paymentMethod,
-        o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-        o.cancellation_requested_at AS cancellationRequestedAt,
-        o.blockchain_key AS blockchainKey, o.blockchain_digest AS blockchainDigest,
-        cp.amount_wei AS amountWei, cp.status AS cryptoStatus,
-        cp.buyer_address AS buyerAddress, cp.payment_tx_hash AS paymentTxHash,
-        cp.ship_tx_hash AS shipTxHash, cp.release_tx_hash AS releaseTxHash,
-        cp.refund_tx_hash AS refundTxHash, cp.cancel_tx_hash AS cancelTxHash
-       FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.id = ? FOR UPDATE`, [id],
-    );
-    const order = rows[0];
-    if (!order || order.paymentMethod !== "crypto") {
-      await connection.rollback();
-      return response.status(404).json({ error: "Không tìm thấy đơn thanh toán ETH thử nghiệm." });
-    }
-    const savedHash = {
-      "mark-shipped": order.shipTxHash, release: order.releaseTxHash,
-      refund: order.refundTxHash, "cancel-unpaid": order.cancelTxHash,
-    }[action];
-    if (savedHash?.toLowerCase() === txHash.toLowerCase()) {
-      await connection.commit();
-      return response.json({ ok: true, txHash, alreadyConfirmed: true });
-    }
-    if (action === "mark-shipped" && (order.orderStatus !== definition.expectedStatus
-        || order.cryptoStatus !== definition.expectedCrypto || order.paymentStatus !== "paid")) {
-      await connection.rollback();
-      return response.status(409).json({ error: "Đơn phải đã đóng gói và có tiền trong escrow trước khi chuyển sang đang giao." });
-    }
-    if (action === "release" && (order.orderStatus !== definition.expectedStatus
-        || order.cryptoStatus !== definition.expectedCrypto || order.paymentStatus !== "paid")) {
-      await connection.rollback();
-      return response.status(409).json({ error: "Chỉ giải ngân sau khi đơn đã chuyển sang đang giao." });
-    }
-    if (["refund", "cancel-unpaid"].includes(action)) {
-      if (!order.cancellationRequestedAt || !["pending", "confirmed", "packing"].includes(order.orderStatus)) {
-        await connection.rollback();
-        return response.status(409).json({ error: "Chỉ xử lý hủy đơn khi yêu cầu còn hiệu lực và đơn chưa chuyển sang giao hàng." });
-      }
-      if (order.cryptoStatus !== definition.expectedCrypto
-          || (action === "refund" && order.paymentStatus !== "paid")
-          || (action === "cancel-unpaid" && order.paymentStatus !== "unpaid")) {
-        await connection.rollback();
-        return response.status(409).json({ error: "Trạng thái thanh toán trên hệ thống không khớp với thao tác hoàn/hủy." });
-      }
-    }
-    const deployment = await loadCryptoDeployment(deploymentFile);
-    provider = new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
-    await verifyEscrowTransaction({
-      provider, deployment, txHash, order, methodName: definition.method,
-      amountWei: order.amountWei,
-    });
-    if (action === "mark-shipped") {
-      await connection.execute("UPDATE crypto_payments SET status = 'shipped', ship_tx_hash = ? WHERE order_id = ?", [txHash, id]);
-      await connection.execute("UPDATE orders SET order_status = 'shipped' WHERE id = ?", [id]);
-    } else if (action === "release") {
-      await connection.execute("UPDATE crypto_payments SET status = 'released', release_tx_hash = ? WHERE order_id = ?", [txHash, id]);
-      await connection.execute("UPDATE orders SET order_status = 'delivered' WHERE id = ?", [id]);
-    } else if (action === "refund") {
-      await connection.execute("UPDATE crypto_payments SET status = 'refunded', refund_tx_hash = ? WHERE order_id = ?", [txHash, id]);
-      await connection.execute("UPDATE orders SET payment_status = 'refunded' WHERE id = ?", [id]);
-    } else {
-      await connection.execute("UPDATE crypto_payments SET status = 'cancelled', cancel_tx_hash = ? WHERE order_id = ?", [txHash, id]);
-    }
-    await connection.commit();
-    response.json({ ok: true, txHash, cryptoStatus: definition.targetStatus });
-  } catch (error) {
-    await connection.rollback();
-    const status = error instanceof CryptoTransactionError ? 400 : 503;
-    response.status(status).json({ error: error.message || "Chưa xác minh được giao dịch trên blockchain." });
-  } finally {
-    provider?.destroy();
-    connection.release();
-  }
-});
-
 app.post("/api/admin/orders/:id/payments/vnpay/refund-confirmation", requireUser, requireAdmin, async (request, response) => {
   const id = Number(request.params.id);
   if (!Number.isSafeInteger(id) || id < 1 || request.body?.refundProcessed !== true) {
@@ -854,7 +794,8 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
   const id = Number(request.params.id);
   const orderStatus = request.body?.orderStatus;
   const paymentStatus = request.body?.paymentStatus;
-  if (!Number.isSafeInteger(id) || id < 1 || (!allowedOrderStatuses.has(orderStatus) && paymentStatus !== "paid")) {
+  if (!Number.isSafeInteger(id) || id < 1
+      || (orderStatus != null ? !allowedOrderStatuses.has(orderStatus) : paymentStatus !== "paid")) {
     return response.status(400).json({ error: "Trạng thái đơn không hợp lệ." });
   }
   const connection = await pool.getConnection();
@@ -862,8 +803,10 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
     await connection.beginTransaction();
     const [rows] = await connection.execute(
       `SELECT o.order_status AS orderStatus, o.payment_status AS paymentStatus, o.payment_method AS paymentMethod,
-        o.cancellation_requested_at AS cancellationRequestedAt
-       FROM orders o WHERE o.id = ? FOR UPDATE`, [id],
+        o.cancellation_requested_at AS cancellationRequestedAt, o.blockchain_key AS blockchainKey,
+        o.blockchain_digest AS blockchainDigest, cp.amount_wei AS amountWei, cp.status AS cryptoStatus,
+        cp.payment_tx_hash AS paymentTxHash
+       FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id WHERE o.id = ? FOR UPDATE`, [id],
     );
     const order = rows[0];
     if (!order) {
@@ -875,8 +818,12 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
       return response.status(409).json({ error: "Đơn đang có yêu cầu hủy. Hãy xử lý yêu cầu trước khi cập nhật trạng thái." });
     }
     if (orderStatus) {
+      if (orderStatus === order.orderStatus) {
+        await connection.commit();
+        return response.json({ ok: true });
+      }
       if (orderStatus === "cancelled" && order.orderStatus !== "cancelled"
-          && order.paymentMethod === "vnpay" && order.paymentStatus === "unpaid") {
+          && order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)) {
         const [activeAttempts] = await connection.execute(
           `SELECT id FROM payment_attempts
            WHERE order_id = ? AND provider = 'vnpay' AND response_code IS NULL
@@ -888,9 +835,9 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
           return response.status(409).json({ error: "Đơn còn phiên VNPay đang mở. Hãy chờ phiên hết hạn rồi hủy để tránh nhận tiền sau khi đơn đã hủy." });
         }
       }
-      if (order.paymentMethod === "crypto" && ["shipped", "delivered", "cancelled"].includes(orderStatus)) {
+      if (order.paymentMethod === "crypto" && orderStatus === "cancelled") {
         await connection.rollback();
-        return response.status(409).json({ error: "Đơn ETH cần xác nhận thao tác đang giao, giải ngân hoặc hủy bằng MetaMask." });
+        return response.status(409).json({ error: "Hãy duyệt yêu cầu hủy của khách để hệ thống xử lý khoản ETH." });
       }
       if (!orderTransitions[order.orderStatus]?.has(orderStatus)) {
         await connection.rollback();
@@ -900,6 +847,18 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
           && ["confirmed", "packing", "shipped", "delivered"].includes(orderStatus)) {
         await connection.rollback();
         return response.status(409).json({ error: "Chưa thể xử lý đơn thanh toán điện tử khi chưa xác nhận thanh toán." });
+      }
+      if (order.paymentMethod === "crypto" && ["shipped", "delivered"].includes(orderStatus)) {
+        const shipping = orderStatus === "shipped";
+        if (order.cryptoStatus !== (shipping ? "escrowed" : "shipped")) {
+          throw Object.assign(new Error("Trạng thái hợp đồng chưa phù hợp để cập nhật đơn ETH."), { status: 409 });
+        }
+        const method = shipping ? "markShipped" : "releaseOrder";
+        const txHash = await writeEscrowAction(order, method);
+        const sql = shipping
+          ? "UPDATE crypto_payments SET status = 'shipped', ship_tx_hash = ? WHERE order_id = ?"
+          : "UPDATE crypto_payments SET status = 'released', release_tx_hash = ? WHERE order_id = ?";
+        await connection.execute(sql, [txHash, id]);
       }
       if (orderStatus === "cancelled" && order.orderStatus !== "cancelled") {
         if (order.paymentStatus === "paid") {
@@ -918,6 +877,7 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
         }
       }
       await connection.execute("UPDATE orders SET order_status = ? WHERE id = ?", [orderStatus, id]);
+      await enqueueOrderProof(connection, id, orderStatus);
     } else {
       if (order.paymentMethod !== "cod") {
         await connection.rollback();
@@ -931,13 +891,22 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
     }
     await connection.commit();
     response.json({ ok: true });
-  } catch {
+  } catch (error) {
     await connection.rollback();
-    response.status(503).json({ error: "Chưa cập nhật được đơn hàng." });
+    response.status(error.status ?? 503).json({ error: error.status ? error.message : "Chưa cập nhật được đơn hàng." });
   } finally {
     connection.release();
   }
 });
+
+async function writeEscrowAction(order, method) {
+  try { return await recordEscrowAction(order, method); }
+  catch (error) {
+    const message = /[À-ỹ]/u.test(error.message)
+      ? error.message : "Chưa tự động xử lý được giao dịch ETH. Hãy kiểm tra Hardhat rồi thử lại.";
+    throw Object.assign(new Error(message), { status: 503 });
+  }
+}
 
 app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin, async (request, response) => {
   const id = Number(request.params.id);
@@ -951,8 +920,9 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
     const [rows] = await connection.execute(
       `SELECT o.order_status AS orderStatus, o.payment_status AS paymentStatus,
         o.payment_method AS paymentMethod, o.cancellation_requested_at AS cancellationRequestedAt,
-        cp.status AS cryptoStatus, cp.refund_tx_hash AS cryptoRefundTxHash,
-        cp.cancel_tx_hash AS cryptoCancelTxHash
+        o.blockchain_key AS blockchainKey, o.blockchain_digest AS blockchainDigest,
+        cp.amount_wei AS amountWei, cp.buyer_address AS buyerAddress, cp.payment_tx_hash AS paymentTxHash,
+        cp.status AS cryptoStatus
        FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id
        WHERE o.id = ? FOR UPDATE`, [id],
     );
@@ -970,9 +940,17 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
       return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể xử lý hủy." });
     }
     if (action === "decline") {
+      if (["refunded", "cancelled"].includes(order.cryptoStatus)) {
+        await connection.rollback();
+        return response.status(409).json({ error: "Đã xử lý giao dịch ETH để hủy đơn. Hãy hoàn tất duyệt hủy." });
+      }
+      if (order.paymentMethod === "crypto" && !await canDeclineEscrowCancellation(order)) {
+        await connection.rollback();
+        return response.status(409).json({ error: "Hợp đồng đã xử lý hủy. Hãy duyệt hủy để cập nhật đơn." });
+      }
       await connection.execute("UPDATE orders SET cancellation_requested_at = NULL WHERE id = ?", [id]);
     } else {
-      if (order.paymentMethod === "vnpay" && order.paymentStatus === "unpaid") {
+      if (order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)) {
         const [activeAttempts] = await connection.execute(
           `SELECT id FROM payment_attempts
            WHERE order_id = ? AND provider = 'vnpay' AND response_code IS NULL
@@ -984,15 +962,16 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
           return response.status(409).json({ error: "Đơn còn phiên VNPay đang mở. Hãy chờ phiên hết hạn rồi duyệt hủy để tránh nhận tiền sau khi hủy đơn." });
         }
       }
-      if (order.paymentMethod === "crypto" && order.paymentStatus === "paid"
-          && (order.cryptoStatus !== "refunded" || !order.cryptoRefundTxHash)) {
-        await connection.rollback();
-        return response.status(409).json({ error: "Hãy xác nhận giao dịch hoàn ETH trên MetaMask trước khi duyệt hủy đơn." });
-      }
-      if (order.paymentMethod === "crypto" && order.paymentStatus === "unpaid"
-          && (order.cryptoStatus !== "cancelled" || !order.cryptoCancelTxHash)) {
-        await connection.rollback();
-        return response.status(409).json({ error: "Hãy xác nhận giao dịch khóa đơn chưa thanh toán trên MetaMask trước khi duyệt hủy." });
+      if (order.paymentMethod === "crypto") {
+        if (order.paymentStatus === "paid" && order.cryptoStatus === "escrowed") {
+          const txHash = await writeEscrowAction(order, "refundOrder");
+          await connection.execute("UPDATE crypto_payments SET status = 'refunded', refund_tx_hash = ? WHERE order_id = ?", [txHash, id]);
+        } else if (order.paymentStatus === "unpaid" && order.cryptoStatus === "unpaid") {
+          const txHash = await writeEscrowAction(order, "cancelUnpaidOrder");
+          await connection.execute("UPDATE crypto_payments SET status = 'cancelled', cancel_tx_hash = ? WHERE order_id = ?", [txHash, id]);
+        } else if (!["refunded", "cancelled"].includes(order.cryptoStatus)) {
+          throw Object.assign(new Error("Trạng thái ETH chưa phù hợp để hủy đơn."), { status: 409 });
+        }
       }
       if (order.paymentStatus === "paid" && order.paymentMethod !== "crypto" && request.body?.refundConfirmed !== true) {
         await connection.rollback();
@@ -1011,12 +990,13 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
           payment_status = CASE WHEN payment_status = 'paid' THEN 'refunded' ELSE payment_status END,
           cancellation_requested_at = NULL WHERE id = ?`, [id],
       );
+      await enqueueOrderProof(connection, id, "cancelled");
     }
     await connection.commit();
     response.json({ ok: true });
-  } catch {
+  } catch (error) {
     await connection.rollback();
-    response.status(503).json({ error: "Chưa xử lý được yêu cầu hủy đơn." });
+    response.status(error.status ?? 503).json({ error: error.status ? error.message : "Chưa xử lý được yêu cầu hủy đơn." });
   } finally {
     connection.release();
   }
@@ -1078,7 +1058,7 @@ app.patch("/api/admin/categories/:id", requireUser, requireAdmin, async (request
 app.get("/api/admin/products", requireUser, requireAdmin, async (_request, response) => {
   try {
     const [products] = await pool.execute(
-      "SELECT id, name, slug, category_id AS categoryId, price_vnd AS priceVnd, stock, short_description AS shortDescription, image_url AS imageUrl, specifications, is_active AS isActive FROM products ORDER BY id DESC",
+      "SELECT id, name, slug, category_id AS categoryId, price_vnd AS priceVnd, compare_at_vnd AS compareAtVnd, stock, short_description AS shortDescription, image_url AS imageUrl, specifications, is_active AS isActive FROM products ORDER BY id DESC",
     );
     response.json({ products });
   } catch {
@@ -1145,69 +1125,6 @@ app.patch("/api/admin/products/:id", requireUser, requireAdmin, async (request, 
   }
 });
 
-app.post("/api/admin/orders/:id/anchor", requireUser, requireAdmin, async (request, response) => {
-  const orderId = Number(request.params.id);
-  const txHash = cleanText(request.body?.txHash, 66);
-  if (!Number.isSafeInteger(orderId) || orderId < 1 || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-    return response.status(400).json({ error: "Mã giao dịch không hợp lệ." });
-  }
-  let deployment;
-  try {
-    deployment = JSON.parse(await readFile(deploymentFile, "utf8"));
-  } catch {
-    return response.status(503).json({ error: "Chưa triển khai hợp đồng local. Hãy chạy bước deploy:local." });
-  }
-  const provider = new JsonRpcProvider(rpcUrl, chainId, { staticNetwork: true });
-  try {
-    const activeChainId = Number(await provider.send("eth_chainId", []));
-    if (activeChainId !== chainId || (deployment.chainId != null && Number(deployment.chainId) !== activeChainId)) {
-      return response.status(503).json({ error: "Máy chủ blockchain đang dùng sai mạng. Hãy khởi động mạng LabChain Local (Chain ID 31337)." });
-    }
-    if (await provider.getCode(deployment.address) === "0x") {
-      return response.status(503).json({ error: "Không tìm thấy hợp đồng trên mạng hiện tại. Hãy chạy lại lệnh deploy:local." });
-    }
-    const [orders] = await pool.execute(
-      "SELECT id, order_status AS orderStatus, blockchain_key AS blockchainKey, blockchain_digest AS blockchainDigest, blockchain_tx_hash AS blockchainTxHash, blockchain_status AS blockchainStatus FROM orders WHERE id = ? LIMIT 1",
-      [orderId],
-    );
-    const order = orders[0];
-    if (!order) return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
-    if (Number(order.blockchainStatus) === orderStatusCode[order.orderStatus]) return response.status(409).json({ error: "Trạng thái đơn này đã được ghi lên blockchain." });
-    const transaction = await provider.getTransaction(txHash);
-    const receipt = await provider.getTransactionReceipt(txHash);
-    if (!transaction || !receipt || receipt.status !== 1 || transaction.to?.toLowerCase() !== deployment.address.toLowerCase()
-        || transaction.from.toLowerCase() !== deployment.admin.toLowerCase()) {
-      return response.status(400).json({ error: "Giao dịch chưa xác nhận hoặc không được gửi từ ví admin đúng hợp đồng." });
-    }
-    const iface = new Interface(deployment.abi);
-    const parsed = iface.parseTransaction({ data: transaction.data, value: transaction.value });
-    const expectedStatus = orderStatusCode[order.orderStatus];
-    if (parsed?.name !== "anchorOrder" || parsed.args[0].toLowerCase() !== order.blockchainKey.toLowerCase()
-        || parsed.args[1].toLowerCase() !== order.blockchainDigest.toLowerCase() || Number(parsed.args[2]) !== expectedStatus) {
-      return response.status(400).json({ error: "Giao dịch blockchain không khớp với mã băm và trạng thái đơn." });
-    }
-    const emitted = receipt.logs.some((log) => {
-      try {
-        const event = iface.parseLog(log);
-        return event?.name === "OrderAnchored" && event.args.orderKey.toLowerCase() === order.blockchainKey.toLowerCase()
-          && event.args.orderDigest.toLowerCase() === order.blockchainDigest.toLowerCase()
-          && Number(event.args.status) === expectedStatus;
-      } catch { return false; }
-    });
-    if (!emitted) return response.status(400).json({ error: "Không tìm thấy sự kiện xác nhận trong giao dịch." });
-    try {
-      await pool.execute("UPDATE orders SET blockchain_tx_hash = ?, blockchain_status = ? WHERE id = ?", [txHash, expectedStatus, orderId]);
-    } catch {
-      return response.status(503).json({ error: "Giao dịch đã được xác minh trên blockchain nhưng chưa lưu được mã vào MySQL. Hãy kiểm tra MySQL rồi thử lưu lại." });
-    }
-    response.json({ ok: true, txHash });
-  } catch (error) {
-    response.status(503).json({ error: error.code === "ECONNREFUSED" ? "Hardhat local chưa chạy. Hãy khởi động mạng LabChain Local." : "Chưa xác minh được giao dịch trên blockchain. Hãy kiểm tra mạng LabChain Local và thử lại." });
-  } finally {
-    provider.destroy();
-  }
-});
-
 app.use("/api", (_request, response) => response.status(404).json({ error: "API không tồn tại." }));
 app.use("/vendor/ethers", express.static(fileURLToPath(new URL("../node_modules/ethers/dist/", import.meta.url)), { maxAge: "1d" }));
 app.use("/vendor/sweetalert2", express.static(fileURLToPath(new URL("../node_modules/sweetalert2/dist/", import.meta.url)), { maxAge: "1d" }));
@@ -1220,4 +1137,5 @@ app.use((error, _request, response, _next) => {
 
 app.listen(port, "127.0.0.1", () => {
   console.log(`Xiaomi Watch Store đang chạy tại http://127.0.0.1:${port}`);
+  startBlockchainAutomation();
 });

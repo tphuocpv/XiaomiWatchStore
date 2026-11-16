@@ -10,6 +10,7 @@ const state = {
   sort: "featured",
   cart: readCart(),
   user: null,
+  cryptoPaymentOrderId: null,
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -20,6 +21,8 @@ const accountDialog = $("#account-dialog");
 const checkoutDialog = $("#checkout-dialog");
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const orderLabels = { pending: "Chờ xử lý", confirmed: "Đã xác nhận", packing: "Đang đóng gói", shipped: "Đang giao", delivered: "Đã giao", cancelled: "Đã hủy" };
+const cryptoOrdersBeingConfirmed = new Set();
+let ordersRevision = 0;
 
 function readCart() {
   try {
@@ -42,7 +45,7 @@ async function api(path, options = {}) {
     headers: { ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Yêu cầu chưa hoàn tất.");
+  if (!response.ok) throw Object.assign(new Error(data.error || "Yêu cầu chưa hoàn tất."), { code: data.code });
   return data;
 }
 
@@ -280,6 +283,7 @@ function setUser(user) {
   const previousUserId = state.user?.id;
   state.user = user;
   $("#account-label").textContent = user ? user.fullName : "Đăng nhập";
+  $("#admin-return").hidden = user?.role !== "admin";
   $("#account-auth").hidden = Boolean(user);
   $("#account-dashboard").hidden = !user;
   if (user) {
@@ -337,11 +341,57 @@ async function loadProducts() {
   renderCart();
 }
 
-async function loadOrders() {
+function isUnpaidCryptoOrder(order) {
+  return order.paymentMethod === "crypto" && ["unpaid", "failed"].includes(order.paymentStatus)
+    && !["cancelled", "shipped", "delivered"].includes(order.orderStatus);
+}
+
+function cryptoPaymentStorageKey(orderId) {
+  return `miwatch-crypto-tx-${orderId}`;
+}
+
+async function confirmCryptoPayment(orderId, txHash, signal) {
+  const id = String(orderId);
+  if (cryptoOrdersBeingConfirmed.has(id)) return false;
+  cryptoOrdersBeingConfirmed.add(id);
+  const storageKey = cryptoPaymentStorageKey(id);
+  try {
+    await api(`/api/orders/${id}/payments/crypto/confirm`, {
+      method: "POST", body: JSON.stringify({ txHash }), signal,
+    });
+    if (localStorage.getItem(storageKey) === txHash) localStorage.removeItem(storageKey);
+    return true;
+  } catch (error) {
+    if (error.code === "CRYPTO_TX_RETRYABLE" && localStorage.getItem(storageKey) === txHash) {
+      localStorage.removeItem(storageKey);
+    }
+    throw error;
+  } finally {
+    cryptoOrdersBeingConfirmed.delete(id);
+  }
+}
+
+async function recoverSubmittedCryptoPayments(orders) {
+  const candidates = orders.filter(isUnpaidCryptoOrder);
+  const results = await Promise.allSettled(candidates.map((order) => {
+    if (state.cryptoPaymentOrderId === String(order.id)) return false;
+    const txHash = localStorage.getItem(cryptoPaymentStorageKey(order.id));
+    return txHash ? confirmCryptoPayment(order.id, txHash, AbortSignal.timeout(8000)) : false;
+  }));
+  return results.some((result) => result.status === "fulfilled" && result.value === true);
+}
+
+async function loadOrders({ recoverCryptoPayments = true } = {}) {
+  const revision = ++ordersRevision;
   const target = $("#customer-orders");
   target.textContent = "Đang tải đơn hàng...";
   try {
-    const { orders } = await api("/api/orders");
+    let { orders } = await api("/api/orders");
+    if (revision !== ordersRevision) return;
+    if (recoverCryptoPayments && await recoverSubmittedCryptoPayments(orders)) {
+      ({ orders } = await api("/api/orders"));
+    }
+    if (revision !== ordersRevision) return;
     target.replaceChildren();
     if (!orders.length) {
       target.textContent = "Bạn chưa có đơn hàng.";
@@ -392,13 +442,15 @@ async function loadOrders() {
         waiting.textContent = `Phiên thanh toán đang mở đến ${vnpayPendingUntil.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}. Hoàn tất hoặc chờ phiên hết hạn để thanh toán lại.`;
         actions.append(waiting);
       }
-      if (order.paymentMethod === "crypto" && ["unpaid", "failed"].includes(order.paymentStatus)
-          && order.orderStatus !== "cancelled" && !order.cancellationRequestedAt) {
+      if (isUnpaidCryptoOrder(order) && !order.cancellationRequestedAt) {
         const retry = document.createElement("button");
         retry.className = "order-action-primary";
         retry.type = "button";
-        retry.textContent = "Thanh toán ETH thử nghiệm";
-        retry.addEventListener("click", () => retryCryptoPayment(order, retry));
+        const inProgress = state.cryptoPaymentOrderId === String(order.id);
+        const savedTx = localStorage.getItem(cryptoPaymentStorageKey(order.id));
+        retry.textContent = inProgress ? "Đang xử lý…" : savedTx ? "Kiểm tra lại giao dịch" : "Thử lại thanh toán ETH";
+        retry.disabled = inProgress;
+        retry.addEventListener("click", () => payCryptoOrder(order, retry));
         actions.append(retry);
       }
       if (order.cancellationRequestedAt) {
@@ -423,6 +475,7 @@ async function loadOrders() {
       target.append(card);
     }
   } catch (error) {
+    if (revision !== ordersRevision) return;
     target.textContent = vietnameseError(error, "Chưa tải được đơn hàng. Vui lòng thử lại.");
   }
 }
@@ -444,32 +497,40 @@ async function retryVnpayPayment(order, button) {
   }
 }
 
-async function retryCryptoPayment(order, button) {
-  button.disabled = true;
-  button.textContent = "Đang mở MetaMask…";
-  const storageKey = `miwatch-crypto-tx-${order.id}`;
-  let txHash = localStorage.getItem(storageKey);
+async function payCryptoOrder(order, button) {
+  if (state.cryptoPaymentOrderId !== null || cryptoOrdersBeingConfirmed.has(String(order.id))) {
+    showToast({ title: "Vui lòng hoàn tất yêu cầu thanh toán ETH đang mở." });
+    return;
+  }
+  state.cryptoPaymentOrderId = String(order.id);
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Đang xử lý…";
+  }
+  const accountMessage = $("#account-message");
+  accountMessage.classList.remove("success");
+  const storageKey = cryptoPaymentStorageKey(order.id);
   try {
+    let txHash = localStorage.getItem(storageKey);
     if (!txHash) {
+      accountMessage.textContent = `Hãy xác nhận thanh toán đơn ${order.orderCode} trong MetaMask.`;
       const quote = await api(`/api/orders/${order.id}/payments/crypto/retry`, { method: "POST" });
-      txHash = await submitCryptoPayment(order, quote, (submittedHash) => localStorage.setItem(storageKey, submittedHash));
+      txHash = await submitCryptoPayment(quote, (submittedHash) => localStorage.setItem(storageKey, submittedHash));
     }
-    await api(`/api/orders/${order.id}/payments/crypto/confirm`, {
-      method: "POST", body: JSON.stringify({ txHash }),
-    });
-    localStorage.removeItem(storageKey);
+    accountMessage.textContent = "Đang xác minh giao dịch ETH…";
+    await confirmCryptoPayment(order.id, txHash);
+    accountMessage.textContent = "";
     showToast({ title: `Đã thanh toán đơn ${order.orderCode} bằng ETH thử nghiệm.` });
-    await loadOrders();
   } catch (error) {
+    if (error.code === "LOCAL_TX_REVERTED") localStorage.removeItem(storageKey);
     const message = vietnameseError(error, "Chưa hoàn tất thanh toán. Đơn vẫn được lưu để bạn thử lại.");
-    const accountMessage = $("#account-message");
-    accountMessage.classList.remove("success");
-    accountMessage.textContent = txHash && localStorage.getItem(storageKey)
+    accountMessage.textContent = localStorage.getItem(storageKey)
       ? `${message} Mã giao dịch đã được lưu trên trình duyệt để đồng bộ lại khi thử lần nữa.` : message;
     showToast({ title: message, icon: "error", timer: 6500 });
-    button.disabled = false;
-    button.textContent = "Thanh toán ETH thử nghiệm";
+  } finally {
+    state.cryptoPaymentOrderId = null;
   }
+  await loadOrders({ recoverCryptoPayments: false });
 }
 
 async function requestCustomerCancellation(order, button) {
@@ -508,7 +569,7 @@ async function loadPaymentOptions() {
     if (!configured && option.checked) $("input[name=paymentMethod][value=cod]").checked = true;
     if (status.cryptoEthVndRate) {
       const rate = new Intl.NumberFormat("vi-VN").format(Number(status.cryptoEthVndRate));
-      $("#crypto-availability").textContent = `Tỷ giá tham khảo 1 ETH = ${rate} ₫; giao dịch chỉ mang tính mô phỏng.`;
+      $("#crypto-availability").textContent = `Tỷ giá thử nghiệm 1 ETH = ${rate} ₫. MetaMask sẽ mở yêu cầu xác nhận khi bạn đặt đơn.`;
     }
     note.textContent = configured
       ? "Giao dịch được xử lý trong môi trường thử nghiệm, không phát sinh khoản thu thực."
@@ -676,12 +737,10 @@ $("#checkout-form").addEventListener("submit", async (event) => {
     }
     if (result.order.paymentMethod === "crypto") {
       closeDialog(checkoutDialog);
-      const paymentButton = document.createElement("button");
-      paymentButton.type = "button";
-      paymentButton.disabled = true;
-      paymentButton.textContent = "Đang mở MetaMask…";
-      message.textContent = `Đã tạo đơn ${result.order.orderCode}. Hãy xác nhận số ETH thử nghiệm trong MetaMask.`;
-      await retryCryptoPayment(result.order, paymentButton);
+      showAccountView("orders");
+      openDialog(accountDialog);
+      $("#customer-orders").textContent = `Đã tạo đơn ${result.order.orderCode}.`;
+      await payCryptoOrder(result.order);
       return;
     }
     message.textContent = "";
@@ -710,6 +769,9 @@ document.addEventListener("keydown", (event) => {
 
 loadProducts();
 loadUser();
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) loadUser();
+});
 loadPaymentOptions();
 document.querySelectorAll('input[name="paymentMethod"]').forEach((input) => input.addEventListener("change", updatePaymentNotes));
 updatePaymentNotes();

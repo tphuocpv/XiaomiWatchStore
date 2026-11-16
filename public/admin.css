@@ -7,9 +7,8 @@
 .admin-intro h1 { margin: 8px 0 10px; font-size: clamp(34px, 5vw, 58px); letter-spacing: -.05em; }
 .admin-intro h1 span { color: #ed7751; }
 .admin-intro > div:first-child > p:last-child { color: #68716e; }
-.wallet-panel { width: min(410px, 100%); padding: 20px; border: 1px solid #d9e2dc; border-radius: 15px; background: white; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.wallet-panel p { margin: 7px 0 0; color: #68716e; font-size: 12px; overflow-wrap: anywhere; }
-.wallet-panel .primary-button { white-space: nowrap; padding: 12px 15px; }
+.blockchain-panel { background: white; border: 1px solid #d9e2dc; }
+.blockchain-panel p { margin: 7px 0 0; color: #68716e; overflow-wrap: anywhere; }
 .admin-message { padding: 14px 17px; margin: 0 0 22px; border-radius: 10px; color: #155b45; background: #e1f2e9; }
 .admin-message.error { color: #a13b30; background: #fff0ed; }
 .admin-login-needed { padding: 36px; border-radius: 16px; background: white; text-align: center; }
@@ -33,13 +32,13 @@
 .order-proof { margin-top: 12px; padding: 12px; background: #f3f8f5; border: 1px dashed #cddbd2; border-radius: 9px; overflow-wrap: anywhere; }
 .order-proof small { display: block; color: #68716e; margin-top: 5px; }
 .order-proof a { color: #176451; font-size: 12px; }
+.blockchain-lookup { text-decoration: underline; text-underline-offset: 2px; }
+.blockchain-panel .blockchain-lookup { display: inline-block; margin-top: 9px; color: #176451; font-size: 12px; font-weight: 650; }
 .order-cancellation-request { display: grid; gap: 6px; margin-top: 14px; padding: 13px; border: 1px solid #ead9bb; border-radius: 9px; background: #fffaf1; color: #594629; }
 .order-cancellation-request small { color: #7b6a50; font-size: 11px; }
 .order-cancellation-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .order-cancellation-actions button { padding: 8px 11px; border: 1px solid #d9c8a7; border-radius: 7px; background: #fff; color: #594629; font: inherit; font-size: 11px; cursor: pointer; }
 .order-cancellation-actions button:disabled { opacity: .6; cursor: wait; }
-.proof-button { padding: 10px 13px; border: 0; border-radius: 8px; background: #176451; color: #fff; cursor: pointer; font-weight: 700; }
-.proof-button:disabled { opacity: .5; cursor: wait; }
 .product-editor { margin-bottom: 25px; }
 .product-editor h3 { margin: 0 0 17px; }
 .admin-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
@@ -58,7 +57,6 @@
 @media (max-width: 760px) {
   .admin-main { width: min(100% - 28px, 600px); padding-top: 38px; }
   .admin-intro { align-items: stretch; flex-direction: column; margin-bottom: 28px; }
-  .wallet-panel { width: auto; }
   .admin-header-actions { gap: 10px; font-size: 11px; }
   .admin-form-grid { grid-template-columns: 1fr; }
   .wide-field { grid-column: auto; }
@@ -80,10 +78,9 @@
 .admin-intro h1 { margin: 0 0 9px; font-size: clamp(34px,4vw,46px); letter-spacing: -.055em; }
 .admin-intro h1 span { color: #8eaa4f; }
 .admin-intro > div:first-child > p:last-child { margin: 0; color: #758079; font-size: 13px; }
-.wallet-panel { width: min(440px, 44%); padding: 15px 17px; border-color: #e0e7e0; border-radius: 12px; box-shadow: 0 5px 20px #20292508; }
-.wallet-panel strong { color: #27312b; font-size: 12px; }
-.wallet-panel p { font-size: 10px; line-height: 1.5; }
-.wallet-panel .primary-button { min-height: 39px; padding: 0 13px; font-size: 10px; }
+.blockchain-panel { width: min(440px, 44%); padding: 15px 17px; border-color: #e0e7e0; border-radius: 12px; box-shadow: 0 5px 20px #20292508; }
+.blockchain-panel strong { color: #27312b; font-size: 12px; }
+.blockchain-panel p { font-size: 12px; line-height: 1.5; }
 .admin-message { border: 1px solid #cce5d6; font-size: 12px; }
 .admin-message.error { border-color: #f1d4cf; }
 .admin-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 13px; margin-bottom: 20px; }
@@ -154,7 +151,7 @@
 @media (max-width: 920px) {
   .admin-main { width: min(100% - 36px, 760px); }
   .admin-intro { align-items: stretch; flex-direction: column; gap: 19px; }
-  .wallet-panel { width: min(100%,520px); }
+  .blockchain-panel { width: min(100%,520px); }
   .admin-workspace { grid-template-columns: 1fr; }
   .admin-sidebar { position: static; padding: 12px; }
   .sidebar-label { margin-bottom: 8px; }
@@ -171,7 +168,6 @@
   .admin-header-actions button { padding: 8px; font-size: 10px; }
   .admin-main { width: calc(100% - 24px); padding-top: 27px; }
   .admin-intro h1 { font-size: 34px; }
-  .wallet-panel { align-items: flex-start; flex-direction: column; }
   .admin-stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-bottom: 13px; }
   .admin-stats article { min-height: 96px; padding: 12px; }
   .admin-stats article strong { font-size: 23px; }

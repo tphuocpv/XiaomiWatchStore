@@ -13,11 +13,13 @@ contract OrderEscrow {
         Status status;
     }
 
-    address payable public immutable admin;
+    address public immutable admin;
+    address payable public immutable merchant;
     address public immutable quoteSigner;
     mapping(bytes32 => Payment) public payments;
 
     error InvalidAdmin();
+    error InvalidMerchant();
     error OnlyAdmin();
     error InvalidOrder();
     error InvalidAmount();
@@ -32,9 +34,11 @@ contract OrderEscrow {
     event OrderRefunded(bytes32 indexed orderKey, address indexed buyer, uint256 amount);
     event OrderCancelled(bytes32 indexed orderKey);
 
-    constructor(address payable adminAddress, address quoteSignerAddress) {
+    constructor(address adminAddress, address quoteSignerAddress, address payable merchantAddress) {
         if (adminAddress == address(0) || quoteSignerAddress == address(0)) revert InvalidAdmin();
+        if (merchantAddress == address(0)) revert InvalidMerchant();
         admin = adminAddress;
+        merchant = merchantAddress;
         quoteSigner = quoteSignerAddress;
     }
 
@@ -62,9 +66,9 @@ contract OrderEscrow {
         if (payment.status != Status.Shipped) revert InvalidState();
         uint256 amount = payment.amount;
         payment.status = Status.Released;
-        (bool sent,) = admin.call{value: amount}("");
+        (bool sent,) = merchant.call{value: amount}("");
         if (!sent) revert TransferFailed();
-        emit OrderReleased(orderKey, admin, amount);
+        emit OrderReleased(orderKey, merchant, amount);
     }
 
     function refundOrder(bytes32 orderKey) external onlyAdmin {

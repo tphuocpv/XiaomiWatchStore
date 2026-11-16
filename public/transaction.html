@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#171b1e">
+    <title>Chi tiết giao dịch — MiTime</title>
+    <link rel="stylesheet" href="/app.css">
+    <link rel="stylesheet" href="/transaction.css">
+    <script type="module" src="/transaction.js"></script>
+  </head>
+  <body class="transaction-page">
+    <header class="site-header transaction-header">
+      <a class="brand" href="/" aria-label="MiTime — Trang cửa hàng"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span></a>
+      <a class="transaction-back" href="/admin.html"><span aria-hidden="true">←</span> Về trang quản trị</a>
+    </header>
+    <main class="transaction-main">
+      <div class="transaction-intro">
+        <span class="transaction-network"><span aria-hidden="true"></span> LabChain Local</span>
+        <h1>Chi tiết giao dịch</h1>
+        <p>Tra cứu giao dịch trên mạng thử nghiệm của cửa hàng.</p>
+      </div>
+
+      <form id="transaction-search" class="transaction-search" action="/transaction.html" method="get" novalidate>
+        <label for="transaction-query">Mã giao dịch</label>
+        <div class="transaction-search-controls">
+          <input id="transaction-query" name="hash" type="text" placeholder="0x…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="transaction-hint transaction-input-error" required>
+          <button class="primary-button" type="submit">Tra cứu</button>
+        </div>
+        <p id="transaction-hint">Dán mã đầy đủ từ đơn hàng hoặc dùng nút sao chép mã trong MetaMask.</p>
+        <p id="transaction-input-error" class="transaction-input-error" role="alert" hidden></p>
+      </form>
+
+      <p id="transaction-message" class="transaction-message" role="status" hidden></p>
+      <a id="transaction-login" class="primary-button" href="/" hidden>Về cửa hàng để đăng nhập</a>
+
+      <div id="transaction-result" class="transaction-result" hidden>
+        <section class="transaction-card" aria-labelledby="transaction-action">
+          <div class="transaction-card-head">
+            <h2 id="transaction-action"></h2>
+            <span id="transaction-status" class="transaction-status"></span>
+          </div>
+          <dl class="transaction-meta">
+            <div><dt>Mã giao dịch</dt><dd class="transaction-hash-row"><code id="transaction-hash"></code><button id="transaction-copy" class="transaction-copy" type="button">Sao chép mã</button><span id="transaction-copy-status" class="transaction-visually-hidden" role="status"></span></dd></div>
+            <div id="transaction-order-row" hidden><dt>Đơn hàng</dt><dd id="transaction-order"></dd></div>
+            <div id="transaction-invoice-row" hidden><dt>Mã băm hóa đơn</dt><dd><code id="transaction-invoice"></code></dd></div>
+            <div><dt>Khối (block)</dt><dd id="transaction-block"></dd></div>
+            <div><dt>Thời gian vào khối</dt><dd id="transaction-time"></dd></div>
+            <div><dt>Mã mạng (chain ID)</dt><dd id="transaction-chain"></dd></div>
+            <div><dt>Địa chỉ gửi giao dịch</dt><dd><code id="transaction-from"></code></dd></div>
+            <div><dt>Địa chỉ được gọi</dt><dd><code id="transaction-to"></code></dd></div>
+          </dl>
+        </section>
+
+        <section id="transaction-movement" class="transaction-card transaction-movement" aria-labelledby="transaction-movement-title" hidden>
+          <div class="transaction-card-head">
+            <div><h2 id="transaction-movement-title">Dòng tiền</h2><p id="transaction-movement-description"></p></div>
+            <strong id="transaction-movement-amount" class="transaction-amount"></strong>
+          </div>
+          <div class="transaction-movement-path">
+            <dl><dt>Nguồn tiền</dt><dd><code id="transaction-movement-from"></code></dd></dl>
+            <span aria-hidden="true">→</span>
+            <dl><dt>Đích nhận ETH</dt><dd><code id="transaction-movement-to"></code></dd></dl>
+          </div>
+          <p id="transaction-movement-note" class="transaction-movement-note" hidden>Blockchain ghi nhận địa chỉ ví và số ETH. Tên người mua và tổng tiền bằng VND nằm trong đơn hàng MiTime.</p>
+        </section>
+
+        <section id="transaction-related" class="transaction-card" aria-labelledby="transaction-related-title" hidden>
+          <div class="transaction-card-head"><h2 id="transaction-related-title">Giao dịch cùng đơn</h2></div>
+          <ul id="transaction-links" class="transaction-links"></ul>
+        </section>
+
+        <section class="transaction-card" aria-labelledby="transaction-fee-title">
+          <div class="transaction-card-head"><h2 id="transaction-fee-title">Giá trị và phí</h2></div>
+          <dl class="transaction-meta">
+            <div><dt>ETH đính kèm giao dịch</dt><dd id="transaction-value"></dd></div>
+            <div><dt>Phí gas đã trả</dt><dd id="transaction-fee"></dd></div>
+            <div><dt>Gas đã dùng</dt><dd id="transaction-gas"></dd></div>
+            <div><dt>Giá gas thực tế</dt><dd id="transaction-price"></dd></div>
+            <div><dt>Số thứ tự trong ví (nonce)</dt><dd id="transaction-nonce"></dd></div>
+          </dl>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

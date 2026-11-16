@@ -17,12 +17,16 @@
     <div class="announcement">MITIME STORE <span>·</span> KHU VỰC QUẢN TRỊ</div>
     <header class="site-header admin-header">
       <a class="brand" href="/" aria-label="MiTime Admin"><span class="brand-mark">M</span><span>mi<span class="brand-light">time</span></span><span class="admin-brand-label">ADMIN</span></a>
-      <div class="admin-header-actions"><span id="admin-user">Đang kiểm tra phiên đăng nhập…</span><a href="/">Cửa hàng <span aria-hidden="true">↗</span></a><button id="admin-logout" type="button" hidden>Đăng xuất</button></div>
+      <div class="admin-header-actions"><span id="admin-user">Đang kiểm tra phiên đăng nhập…</span><a href="/">Xem cửa hàng <span aria-hidden="true">↗</span></a><button id="admin-logout" type="button" hidden>Đăng xuất</button></div>
     </header>
     <main class="admin-main">
       <section class="admin-intro">
         <div><p class="eyebrow">BACK OFFICE · MITIME STORE</p><h1>Quản lý cửa hàng<span>.</span></h1><p>Quản lý khách hàng, danh mục, sản phẩm và quy trình xử lý đơn.</p></div>
-        <div class="wallet-panel"><div><strong>Ví MetaMask</strong><p id="wallet-status">Chưa kết nối ví admin.</p></div><button id="wallet-connect" class="primary-button" type="button">Kết nối MetaMask</button></div>
+        <div class="blockchain-panel" id="blockchain-panel" hidden>
+          <strong>Đồng bộ blockchain</strong>
+          <p id="blockchain-status" role="status">Đang kiểm tra dịch vụ…</p>
+          <a class="blockchain-lookup" href="/transaction.html">Tra cứu mã giao dịch <span aria-hidden="true">↗</span></a>
+        </div>
       </section>
       <p id="admin-message" class="admin-message" role="status" hidden></p>
       <section id="admin-login-needed" class="admin-login-needed" hidden><h2>Cần đăng nhập bằng tài khoản admin</h2><p>Hãy đăng nhập ở cửa hàng bằng tài khoản quản trị để mở bảng điều khiển này.</p><a class="primary-button" href="/">Về trang cửa hàng</a></section>

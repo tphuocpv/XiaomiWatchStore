@@ -23,6 +23,9 @@
         <a href="#products" data-category-link="dong-ho-redmi">Redmi Watch</a>
       </nav>
       <div class="header-actions">
+        <a class="admin-return-link" id="admin-return" href="/admin.html" aria-label="Về trang quản trị" hidden>
+          <span class="admin-return-full">Về trang quản trị</span><span class="admin-return-short">Quản trị</span>
+        </a>
         <button class="icon-button" id="account-button" type="button" aria-label="Tài khoản">♙ <span id="account-label">Đăng nhập</span></button>
         <button class="cart-button" id="cart-open" type="button" aria-label="Mở giỏ hàng">Giỏ hàng <span class="cart-count" id="cart-count">0</span></button>
       </div>
@@ -178,11 +181,11 @@
               </label>
               <label class="payment-choice">
                 <input id="crypto-option" type="radio" name="paymentMethod" value="crypto">
-                <span class="payment-choice-copy"><strong>Ví MetaMask (ETH)</strong><small>Giao dịch mô phỏng, không thu tiền thật</small></span>
+                <span class="payment-choice-copy"><strong>Ví MetaMask (ETH)</strong><small>ETH thử nghiệm trên LabChain Local</small></span>
                 <span class="payment-tag payment-tag-test">Thử nghiệm</span>
               </label>
               <p class="payment-note" id="vnpay-availability" role="status" hidden></p>
-              <p class="payment-note" id="crypto-availability" role="status" hidden>Giao dịch ETH chỉ mang tính mô phỏng, không phát sinh khoản thu thực.</p>
+              <p class="payment-note" id="crypto-availability" role="status" hidden>MetaMask sẽ mở yêu cầu xác nhận khi bạn đặt đơn.</p>
             </fieldset>
           </section>
           <p class="form-message" id="checkout-message" role="status"></p>

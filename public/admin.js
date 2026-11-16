@@ -1,6 +1,5 @@
 import { installVietnameseValidation, vietnameseError } from "./error-messages.js";
 import { confirmAction, showToast } from "./notifications.js";
-import { submitAdminEscrowAction } from "./crypto-wallet.js";
 
 const $ = (selector) => document.querySelector(selector);
 const currency = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
@@ -8,10 +7,10 @@ const orderStates = [
   ["pending", "Chờ xử lý"], ["confirmed", "Đã xác nhận"], ["packing", "Đang đóng gói"],
   ["shipped", "Đang giao"], ["delivered", "Đã giao"], ["cancelled", "Đã hủy"],
 ];
-let deployment = null;
-let walletAccount = null;
 let categories = [];
 let users = [];
+let ordersRevision = 0;
+let proofRefreshTimer;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -68,31 +67,61 @@ function parseSpecifications(value) {
   return specifications;
 }
 
-async function loadDeployment() {
-  try {
-    const response = await fetch("/deployment.json", { cache: "no-store" });
-    if (!response.ok) throw new Error("missing");
-    deployment = await response.json();
-    $("#wallet-status").textContent = walletAccount
-      ? `Đã kết nối ${walletAccount}`
-      : `Hợp đồng đã triển khai · Admin: ${deployment.admin}`;
-  } catch {
-    deployment = null;
-    $("#wallet-status").textContent = "Tích hợp blockchain chưa sẵn sàng. Vui lòng thử lại sau.";
-  }
+function showBlockchainAutomation(automation) {
+  $("#blockchain-panel").hidden = false;
+  $("#blockchain-status").textContent = automation?.message ?? (automation?.ready
+    ? "MiTime tự động ghi trạng thái đơn lên blockchain."
+    : "Dịch vụ blockchain chưa sẵn sàng. Kiểm tra mạng thử nghiệm và cấu hình máy chủ.");
+}
+
+function scheduleOrderProofRefresh(orders, revision) {
+  const needsRefresh = orders.some((order) => ["pending", "error"].includes(order.blockchainSync));
+  if (!needsRefresh) return;
+  proofRefreshTimer = window.setTimeout(async () => {
+    if (revision !== ordersRevision) return;
+    if (document.hidden || $("#orders-panel").hidden) {
+      scheduleOrderProofRefresh(orders, revision);
+      return;
+    }
+    try {
+      const result = await api("/api/admin/orders");
+      if (revision !== ordersRevision) return;
+      showBlockchainAutomation(result.blockchainAutomation);
+      const currentProofs = new Map([...document.querySelectorAll("#admin-orders .order-proof")]
+        .map((proof) => [proof.dataset.orderId, proof]));
+      for (const order of result.orders) {
+        const proof = currentProofs.get(String(order.id));
+        if (!proof) continue;
+        if (proof.dataset.orderStatus === order.orderStatus) proof.replaceWith(renderOrderProof(order));
+        else proof.closest(".admin-order-card")?.replaceWith(renderOrder(order));
+      }
+      scheduleOrderProofRefresh(result.orders, revision);
+    } catch {
+      if (revision === ordersRevision) {
+        showBlockchainAutomation({ message: "Chưa tải được trạng thái đồng bộ blockchain." });
+        scheduleOrderProofRefresh(orders, revision);
+      }
+    }
+  }, orders.some((order) => order.blockchainSync === "pending") ? 3000 : 6000);
 }
 
 async function loadOrders() {
+  const revision = ++ordersRevision;
+  window.clearTimeout(proofRefreshTimer);
   const target = $("#admin-orders");
   target.replaceChildren(emptyNode("Đang tải đơn hàng…"));
   try {
-    const { orders } = await api("/api/admin/orders");
+    const { orders, blockchainAutomation } = await api("/api/admin/orders");
+    if (revision !== ordersRevision) return;
+    showBlockchainAutomation(blockchainAutomation);
     $("#stat-orders").textContent = String(orders.length);
     $("#stat-pending").textContent = String(orders.filter((order) => order.orderStatus === "pending").length);
     target.replaceChildren();
     if (!orders.length) return target.append(emptyNode("Chưa có đơn hàng."));
     for (const order of orders) target.append(renderOrder(order));
+    scheduleOrderProofRefresh(orders, revision);
   } catch (error) {
+    if (revision !== ordersRevision) return;
     target.replaceChildren(emptyNode(vietnameseError(error, "Chưa tải được đơn hàng.")));
   }
 }
@@ -226,15 +255,13 @@ function renderOrder(order) {
   status.setAttribute("aria-label", `Trạng thái đơn ${order.orderCode}`);
   const electronicUnpaid = ["vnpay", "crypto"].includes(order.paymentMethod) && order.paymentStatus !== "paid";
   const vnpayPendingUntil = order.vnpayPendingUntil ? new Date(order.vnpayPendingUntil) : null;
-  const vnpayAttemptActive = order.paymentMethod === "vnpay" && order.paymentStatus === "unpaid"
+  const vnpayAttemptActive = order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)
     && vnpayPendingUntil && vnpayPendingUntil.getTime() > Date.now();
   for (const [code, label] of orderStates) {
+    if (code !== order.orderStatus && (!order.nextOrderStatuses.includes(code)
+        || (electronicUnpaid && code !== "cancelled")
+        || (code === "cancelled" && (vnpayAttemptActive || order.paymentStatus === "paid" || order.paymentMethod === "crypto")))) continue;
     selectOption(status, code, label);
-    if (electronicUnpaid && ["confirmed", "packing", "shipped", "delivered"].includes(code)) {
-      status.lastElementChild.disabled = true;
-    }
-    if (code === "cancelled" && vnpayAttemptActive) status.lastElementChild.disabled = true;
-    if (order.paymentMethod === "crypto" && code === "cancelled") status.lastElementChild.disabled = true;
   }
   if (vnpayAttemptActive) status.title = "Chờ phiên VNPay hiện tại hoàn tất hoặc hết hạn trước khi hủy đơn.";
   else if (electronicUnpaid) status.title = "Chờ xác nhận thanh toán điện tử trước khi xử lý đơn.";
@@ -243,23 +270,23 @@ function renderOrder(order) {
   saveStatus.type = "button";
   saveStatus.className = "secondary-button";
   saveStatus.textContent = "Cập nhật đơn";
-  status.disabled = Boolean(order.cancellationRequestedAt);
-  saveStatus.disabled = Boolean(order.cancellationRequestedAt);
+  status.disabled = Boolean(order.cancellationRequestedAt) || status.options.length < 2;
+  saveStatus.disabled = true;
+  status.addEventListener("change", () => { saveStatus.disabled = status.value === order.orderStatus; });
   saveStatus.addEventListener("click", async () => {
+    saveStatus.disabled = true;
+    status.disabled = true;
     try {
       if (status.value === order.orderStatus) return;
-      if (order.paymentMethod === "crypto" && status.value === "shipped") {
-        announce("Hãy xác nhận chuyển trạng thái sang đang giao trong MetaMask…");
-        await recordCryptoAdminAction(order, "mark-shipped", "markShipped");
-      } else if (order.paymentMethod === "crypto" && status.value === "delivered") {
-        announce("Hãy xác nhận giải ngân ETH trong MetaMask…");
-        await recordCryptoAdminAction(order, "release", "releaseOrder");
-      } else {
-        await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
-      }
+      announce("Đang cập nhật đơn hàng…");
+      await api(`/api/admin/orders/${order.id}`, { method: "PATCH", body: JSON.stringify({ orderStatus: status.value }) });
       announce(`Đã cập nhật đơn ${order.orderCode}.`);
       await loadOrders();
     } catch (error) { announce(vietnameseError(error, "Chưa cập nhật được đơn hàng."), true); }
+    finally {
+      status.disabled = false;
+      saveStatus.disabled = status.value === order.orderStatus;
+    }
   });
   controls.append(status, saveStatus);
   if (order.cancellationRequestedAt) {
@@ -276,9 +303,7 @@ function renderOrder(order) {
     approve.type = "button";
     approve.className = "secondary-button";
     approve.textContent = order.paymentMethod === "crypto"
-      ? order.cryptoStatus === "escrowed" ? "Hoàn ETH và duyệt hủy"
-        : order.cryptoStatus === "refunded" ? "Hoàn tất duyệt hủy"
-          : order.cryptoStatus === "cancelled" ? "Duyệt hủy đơn" : "Khóa thanh toán và duyệt hủy"
+      ? "Duyệt hủy đơn"
       : order.paymentStatus === "paid" ? "Xác nhận hoàn tiền và hủy" : "Duyệt hủy đơn";
     approve.addEventListener("click", () => resolveCancellationRequest(order, "approve", approve));
     const decline = document.createElement("button");
@@ -286,7 +311,8 @@ function renderOrder(order) {
     decline.className = "secondary-button";
     decline.textContent = "Từ chối yêu cầu";
     decline.addEventListener("click", () => resolveCancellationRequest(order, "decline", decline));
-    cancellationActions.append(approve, decline);
+    cancellationActions.append(approve);
+    if (!["refunded", "cancelled"].includes(order.cryptoStatus)) cancellationActions.append(decline);
     cancellation.append(cancellationTitle, cancellationDate, cancellationActions);
   }
   if (order.paymentMethod === "cod" && order.paymentStatus !== "paid" && order.orderStatus === "delivered") {
@@ -339,55 +365,80 @@ function renderOrder(order) {
     refundPanel.append(warning, note, refundActions);
   }
 
-  const proof = document.createElement("div");
-  proof.className = "order-proof";
-  const proofText = document.createElement("div");
-  const currentCode = orderStates.findIndex(([code]) => code === order.orderStatus) + 1;
-  const recorded = Number(order.blockchainStatus) === currentCode;
-  proofText.textContent = recorded
-    ? `Đã ghi nhận trạng thái “${orderStates[currentCode - 1]?.[1]}” trên blockchain.`
-    : "Trạng thái đơn hiện tại chưa có bằng chứng blockchain.";
-  const digest = document.createElement("small");
-  digest.textContent = `Mã băm đơn: ${order.blockchainDigest}`;
-  proof.append(proofText, digest);
-  if (order.paymentMethod === "crypto") {
-    const cryptoDetails = document.createElement("small");
-    const amountEth = order.cryptoAmountWei && window.ethers ? window.ethers.formatEther(order.cryptoAmountWei) : "chưa có báo giá";
-    cryptoDetails.textContent = `Escrow: ${order.cryptoStatus || "chưa khởi tạo"} · ${amountEth} ETH thử nghiệm`;
-    proof.append(cryptoDetails);
-    if (order.cryptoPaymentTxHash) {
-      const paymentTx = document.createElement("small");
-      paymentTx.textContent = `Mã thanh toán: ${order.cryptoPaymentTxHash}`;
-      proof.append(paymentTx);
-    }
-    const escrowTx = order.cryptoReleaseTxHash || order.cryptoRefundTxHash || order.cryptoShipTxHash;
-    if (escrowTx) {
-      const actionTx = document.createElement("small");
-      actionTx.textContent = `Mã giao dịch escrow gần nhất: ${escrowTx}`;
-      proof.append(actionTx);
-    }
-  }
-  if (order.blockchainTxHash) {
-    const tx = document.createElement("small");
-    tx.textContent = `Giao dịch gần nhất: ${order.blockchainTxHash}`;
-    proof.append(tx);
-  }
-  if (!recorded) {
-    const anchor = document.createElement("button");
-    anchor.type = "button";
-    anchor.className = "proof-button";
-    anchor.textContent = order.blockchainTxHash ? "Ghi trạng thái mới bằng MetaMask" : "Ghi dấu đơn bằng MetaMask";
-    anchor.disabled = !deployment;
-    anchor.addEventListener("click", () => anchorOrder(order, anchor));
-    proof.append(anchor);
-  }
-
   card.append(top, address);
   if (items.childElementCount) card.append(items);
   if (cancellationPanel) card.append(cancellationPanel);
   if (refundPanel) card.append(refundPanel);
-  card.append(controls, proof);
+  card.append(controls, renderOrderProof(order));
   return card;
+}
+
+function orderTransactionLink(label, hash) {
+  const row = document.createElement("small");
+  row.textContent = `${label}: `;
+  const link = document.createElement("a");
+  link.className = "blockchain-lookup";
+  link.href = `/transaction.html?${new URLSearchParams({ hash })}`;
+  link.textContent = `${hash.slice(0, 10)}…${hash.slice(-6)} ↗`;
+  link.title = hash;
+  link.setAttribute("aria-label", `Xem chi tiết giao dịch ${label.toLowerCase()}, mã ${hash}`);
+  row.append(link);
+  return row;
+}
+
+function renderOrderProof(order) {
+  const proof = document.createElement("div");
+  proof.className = "order-proof";
+  proof.dataset.orderId = String(order.id);
+  proof.dataset.orderStatus = order.orderStatus;
+  const proofText = document.createElement("div");
+  const currentCode = orderStates.findIndex(([code]) => code === order.orderStatus) + 1;
+  const recorded = order.blockchainProof === "verified" && Number(order.blockchainStatus) === currentCode;
+  const syncMessages = {
+    pending: "Đang chờ MiTime ghi trạng thái lên blockchain.",
+    error: "Chưa đồng bộ được blockchain. Kiểm tra dịch vụ để MiTime có thể thử lại.",
+  };
+  const proofMessages = {
+    missing: "Giao dịch đã lưu không còn trên mạng hiện tại.",
+    unavailable: "Chưa thể đối chiếu giao dịch trên mạng thử nghiệm.",
+  };
+  proofText.textContent = recorded
+    ? `Đã ghi nhận trạng thái “${orderStates[currentCode - 1]?.[1]}” trên blockchain.`
+    : syncMessages[order.blockchainSync] ?? proofMessages[order.blockchainProof]
+      ?? "Trạng thái đơn hiện tại chưa có bằng chứng blockchain.";
+  proof.append(proofText);
+  if (order.blockchainDigest) {
+    const digest = document.createElement("small");
+    digest.textContent = `Mã băm đơn: ${order.blockchainDigest}`;
+    proof.append(digest);
+  }
+  if (order.paymentMethod === "crypto") {
+    const cryptoDetails = document.createElement("small");
+    const amountEth = order.cryptoAmountWei && window.ethers ? window.ethers.formatEther(order.cryptoAmountWei) : "chưa có báo giá";
+    const escrowLabels = {
+      unpaid: "Chờ thanh toán",
+      escrowed: "Hợp đồng đang giữ ETH",
+      shipped: "Hợp đồng giữ ETH trong lúc giao",
+      released: "Đã giải ngân",
+      refunded: "Đã hoàn ETH",
+      cancelled: "Đã khóa thanh toán",
+    };
+    cryptoDetails.textContent = `${escrowLabels[order.cryptoStatus] ?? "Chưa có trạng thái thanh toán ETH"} · ${amountEth} ETH thử nghiệm`;
+    proof.append(cryptoDetails);
+    for (const [label, hash] of [
+      ["Thanh toán", order.cryptoPaymentTxHash],
+      ["Chuyển sang giao hàng", order.cryptoShipTxHash],
+      ["Giải ngân", order.cryptoReleaseTxHash],
+      ["Hoàn ETH", order.cryptoRefundTxHash],
+      ["Khóa thanh toán", order.cryptoCancelTxHash],
+    ]) {
+      if (hash) proof.append(orderTransactionLink(label, hash));
+    }
+  }
+  if (order.blockchainTxHash) {
+    proof.append(orderTransactionLink("Ghi trạng thái đơn", order.blockchainTxHash));
+  }
+  return proof;
 }
 
 async function resolveCancellationRequest(order, action, button) {
@@ -395,9 +446,9 @@ async function resolveCancellationRequest(order, action, button) {
   const prompt = action === "approve"
     ? order.paymentMethod === "crypto"
       ? order.cryptoStatus === "escrowed"
-        ? "MetaMask sẽ hoàn ETH về ví khách. Chỉ hủy sau khi giao dịch hoàn tiền được xác nhận."
+        ? "MiTime sẽ hoàn ETH về ví khách rồi cập nhật đơn thành đã hủy."
         : order.cryptoStatus === "unpaid"
-          ? "MetaMask sẽ đánh dấu mã đơn đã hủy để ngăn giao dịch ETH đến muộn."
+          ? "MiTime sẽ khóa thanh toán ETH của đơn rồi cập nhật đơn thành đã hủy."
           : "Hoàn tất yêu cầu hủy đã có giao dịch escrow xác nhận."
       : paid
       ? "Chỉ tiếp tục sau khi đã xử lý hoàn tiền. Hệ thống sẽ ghi nhận đơn là đã hoàn tiền và hủy đơn."
@@ -409,17 +460,7 @@ async function resolveCancellationRequest(order, action, button) {
     confirmText: action === "approve" ? "Duyệt hủy đơn" : "Từ chối yêu cầu",
   })) return;
   button.disabled = true;
-  let pendingActionKey = null;
   try {
-    if (action === "approve" && order.paymentMethod === "crypto") {
-      if (order.cryptoStatus === "escrowed" && order.paymentStatus === "paid") {
-        pendingActionKey = await recordCryptoAdminAction(order, "refund", "refundOrder", true);
-      } else if (order.cryptoStatus === "unpaid" && order.paymentStatus === "unpaid") {
-        pendingActionKey = await recordCryptoAdminAction(order, "cancel-unpaid", "cancelUnpaidOrder", true);
-      } else if (!["refunded", "cancelled"].includes(order.cryptoStatus)) {
-        throw new Error("Trạng thái escrow không phù hợp để duyệt hủy. Hãy tải lại danh sách đơn.");
-      }
-    }
     await api(`/api/admin/orders/${order.id}/cancellation-request`, {
       method: "POST",
       body: JSON.stringify({
@@ -427,87 +468,11 @@ async function resolveCancellationRequest(order, action, button) {
         refundConfirmed: action === "approve" && order.paymentStatus === "paid" && order.paymentMethod !== "crypto",
       }),
     });
-    if (pendingActionKey) localStorage.removeItem(pendingActionKey);
     showToast({ title: action === "approve" ? `Đã xử lý hủy đơn ${order.orderCode}.` : `Đã từ chối yêu cầu ${order.orderCode}.` });
     await loadOrders();
   } catch (error) {
     button.disabled = false;
     showToast({ title: vietnameseError(error, "Chưa xử lý được yêu cầu hủy đơn."), icon: "error", timer: 5200 });
-  }
-}
-
-async function recordCryptoAdminAction(order, action, contractMethod, keepForFollowUp = false) {
-  const storageKey = `miwatch-admin-escrow-${order.id}-${action}`;
-  let txHash = localStorage.getItem(storageKey);
-  if (!txHash) {
-    txHash = await submitAdminEscrowAction(order.blockchainKey, contractMethod);
-    localStorage.setItem(storageKey, txHash);
-  }
-  await api(`/api/admin/orders/${order.id}/payments/crypto/action`, {
-    method: "POST", body: JSON.stringify({ action, txHash }),
-  });
-  if (!keepForFollowUp) localStorage.removeItem(storageKey);
-  return storageKey;
-}
-
-async function connectWallet() {
-  if (!window.ethereum) throw new Error("Chrome chưa thấy tiện ích MetaMask. Hãy mở MetaMask và tải lại trang này.");
-  if (!deployment) await loadDeployment();
-  if (!deployment) throw new Error("Tích hợp blockchain chưa sẵn sàng. Vui lòng kiểm tra cấu hình hệ thống.");
-  const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-  walletAccount = accounts[0];
-  if (walletAccount.toLowerCase() !== deployment.admin.toLowerCase()) {
-    throw new Error(`Ví đang chọn chưa phải ví admin của hợp đồng. Địa chỉ cần dùng: ${deployment.admin}`);
-  }
-  let chain = await window.ethereum.request({ method: "eth_chainId" });
-  if (chain !== "0x7a69") {
-    try {
-      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x7a69" }] });
-    } catch (error) {
-      if (error.code !== 4902) throw error;
-      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
-        chainId: "0x7a69", chainName: "LabChain Local", rpcUrls: ["http://127.0.0.1:8545"],
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      }] });
-    }
-    chain = await window.ethereum.request({ method: "eth_chainId" });
-  }
-  if (chain !== "0x7a69") throw new Error("MetaMask chưa kết nối với mạng LabChain Local. Vui lòng kiểm tra mạng đang chọn.");
-  const contractCode = await window.ethereum.request({ method: "eth_getCode", params: [deployment.address, "latest"] });
-  if (!contractCode || contractCode === "0x") {
-    throw new Error("Không tìm thấy hợp đồng trên mạng LabChain Local. Vui lòng kiểm tra cấu hình mạng.");
-  }
-  $("#wallet-status").textContent = `Đã kết nối ví admin ${walletAccount}`;
-  return walletAccount;
-}
-
-async function waitForReceipt(txHash) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const receipt = await window.ethereum.request({ method: "eth_getTransactionReceipt", params: [txHash] });
-    if (receipt) {
-      if (receipt.status !== "0x1") throw new Error("Giao dịch không được xác nhận trên blockchain.");
-      return receipt;
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 1000));
-  }
-  throw new Error("Chưa nhận được xác nhận giao dịch. Vui lòng kiểm tra MetaMask và thử lại.");
-}
-
-async function anchorOrder(order, button) {
-  button.disabled = true;
-  try {
-    const from = await connectWallet();
-    const status = orderStates.findIndex(([code]) => code === order.orderStatus) + 1;
-    const data = `0x9e6378b6${order.blockchainKey.slice(2)}${order.blockchainDigest.slice(2)}${status.toString(16).padStart(64, "0")}`;
-    const txHash = await window.ethereum.request({ method: "eth_sendTransaction", params: [{ from, to: deployment.address, data, value: "0x0" }] });
-    announce("Đã gửi yêu cầu. Vui lòng xác nhận giao dịch trong MetaMask…");
-    await waitForReceipt(txHash);
-    await api(`/api/admin/orders/${order.id}/anchor`, { method: "POST", body: JSON.stringify({ txHash }) });
-    announce(`Đã ghi nhận bằng chứng blockchain cho đơn ${order.orderCode}. Mã giao dịch: ${txHash}`);
-    await loadOrders();
-  } catch (error) {
-    announce(vietnameseError(error, "Chưa ghi được giao dịch blockchain."), true);
-    button.disabled = false;
   }
 }
 
@@ -634,7 +599,7 @@ async function initialize() {
     $("#admin-user").textContent = `Xin chào, ${user.fullName}`;
     $("#admin-logout").hidden = false;
     $("#admin-dashboard").hidden = false;
-    await Promise.all([loadDeployment(), loadOrders(), loadProducts(), loadUsers()]);
+    await Promise.all([loadOrders(), loadProducts(), loadUsers()]);
   } catch (error) {
     $("#admin-login-needed").hidden = false;
     $("#admin-user").textContent = "Chưa thể kiểm tra đăng nhập";
@@ -651,10 +616,6 @@ document.querySelectorAll("[data-panel]").forEach((button) => {
   });
 });
 
-$("#wallet-connect").addEventListener("click", async () => {
-  try { await connectWallet(); announce("Đã kết nối ví quản trị với mạng blockchain."); }
-  catch (error) { announce(vietnameseError(error, "Chưa kết nối được MetaMask."), true); }
-});
 $("#orders-reload").addEventListener("click", loadOrders);
 $("#users-reload").addEventListener("click", loadUsers);
 $("#products-reload").addEventListener("click", loadProducts);

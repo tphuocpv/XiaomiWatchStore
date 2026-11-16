@@ -16,6 +16,10 @@ button{cursor:pointer}
 .desktop-nav{display:flex;gap:32px;color:#51585c;font-size:12px}
 .desktop-nav a:hover,.site-footer>a:last-child:hover{color:#526d00}
 .header-actions{display:flex;align-items:center;gap:12px}
+.admin-return-link{display:inline-flex;align-items:center;min-height:36px;padding:0 10px;border:1px solid #bbcbc3;border-radius:7px;font-size:12px;font-weight:650;color:#145647;white-space:nowrap}
+.admin-return-link:hover{background:#e8f1ec}
+.admin-return-link[hidden],.admin-return-short{display:none}
+@media(max-width:620px){.admin-return-link{padding:0 7px;font-size:11px}.admin-return-full{display:none}.admin-return-short{display:inline}}
 .icon-button,.cart-button{height:40px;border:0;background:transparent;padding:0 12px;color:#3a4144;font-size:12px}
 .icon-button{display:flex;gap:8px;align-items:center}
 .cart-button{background:#171b1e;color:#fff;border-radius:7px;padding:0 15px}
