@@ -109,10 +109,10 @@ function parseVnpayRequest(request) {
 async function applyVnpayResult(search) {
   const transactionRef = cleanText(search.get("vnp_TxnRef"), 32);
   const [rows] = await pool.execute(
-    `SELECT o.id, o.order_code AS orderCode, o.total_vnd AS totalVnd,
-        o.payment_method AS paymentMethod, o.order_status AS orderStatus
-     FROM payment_attempts pa JOIN orders o ON o.id = pa.order_id
-     WHERE pa.transaction_ref = ? AND pa.provider = 'vnpay' LIMIT 1`,
+    `SELECT o.ma AS id, o.ma_don AS orderCode, o.tong_tien_vnd AS totalVnd,
+        o.phuong_thuc_thanh_toan AS paymentMethod, o.trang_thai_don AS orderStatus
+     FROM lan_thanh_toan pa JOIN don_hang o ON o.ma = pa.ma_don_hang
+     WHERE pa.ma_tham_chieu = ? AND pa.nha_cung_cap = 'vnpay' LIMIT 1`,
     [transactionRef],
   );
   const order = rows[0];
@@ -124,14 +124,14 @@ async function applyVnpayResult(search) {
   try {
     await connection.beginTransaction();
     const [lockedRows] = await connection.execute(
-      "SELECT payment_status AS paymentStatus, order_status AS orderStatus FROM orders WHERE id = ? FOR UPDATE", [order.id],
+      "SELECT trang_thai_thanh_toan AS paymentStatus, trang_thai_don AS orderStatus FROM don_hang WHERE ma = ? FOR UPDATE", [order.id],
     );
     const locked = lockedRows[0];
     const status = locked?.paymentStatus;
     if (status === "paid") {
       if (success) {
         await connection.execute(
-          "UPDATE payment_attempts SET response_code = '00', secure_hash_valid = TRUE WHERE transaction_ref = ?",
+          "UPDATE lan_thanh_toan SET ma_phan_hoi = '00', chu_ky_hop_le = TRUE WHERE ma_tham_chieu = ?",
           [transactionRef],
         );
       }
@@ -147,14 +147,14 @@ async function applyVnpayResult(search) {
     }
     if (success) {
       await connection.execute(
-        "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE id = ?", [order.id],
+        "UPDATE don_hang SET trang_thai_thanh_toan = 'paid', trang_thai_don = CASE WHEN trang_thai_don = 'cancelled' THEN 'cancelled' ELSE 'confirmed' END WHERE ma = ?", [order.id],
       );
       if (locked.orderStatus !== "cancelled") await enqueueOrderProof(connection, order.id, "confirmed");
     } else {
-      await connection.execute("UPDATE orders SET payment_status = 'failed' WHERE id = ?", [order.id]);
+      await connection.execute("UPDATE don_hang SET trang_thai_thanh_toan = 'failed' WHERE ma = ?", [order.id]);
     }
     await connection.execute(
-      "UPDATE payment_attempts SET response_code = ?, secure_hash_valid = TRUE WHERE transaction_ref = ?",
+      "UPDATE lan_thanh_toan SET ma_phan_hoi = ?, chu_ky_hop_le = TRUE WHERE ma_tham_chieu = ?",
       [search.get("vnp_ResponseCode"), transactionRef],
     );
     await connection.commit();
@@ -184,7 +184,7 @@ app.get("/api/health", async (_request, response) => {
 
 app.get("/api/categories", async (_request, response) => {
   try {
-    const [rows] = await pool.execute("SELECT id, name, slug, description FROM categories ORDER BY name");
+    const [rows] = await pool.execute("SELECT ma AS id, ten AS name, ten_duong_dan AS slug, mo_ta AS description FROM danh_muc ORDER BY ten");
     response.json({ categories: rows });
   } catch {
     response.status(503).json({ error: "MySQL chưa sẵn sàng. Hãy khởi động MySQL và nhập schema." });
@@ -195,23 +195,23 @@ app.get("/api/products", async (request, response) => {
   try {
     const search = cleanText(request.query.search, 100);
     const category = cleanText(request.query.category, 120);
-    const conditions = ["p.is_active = TRUE"];
+    const conditions = ["p.dang_hoat_dong = TRUE"];
     const values = [];
     if (search) {
-      conditions.push("(p.name LIKE ? OR p.short_description LIKE ?)");
+      conditions.push("(p.ten LIKE ? OR p.mo_ta_ngan LIKE ?)");
       values.push(`%${search}%`, `%${search}%`);
     }
     if (category) {
-      conditions.push("c.slug = ?");
+      conditions.push("c.ten_duong_dan = ?");
       values.push(category);
     }
     const [rows] = await pool.execute(
-      `SELECT p.id, p.name, p.slug, p.short_description AS shortDescription,
-              p.specifications, p.price_vnd AS priceVnd,
-              p.compare_at_vnd AS compareAtVnd, p.stock,
-              p.image_url AS imageUrl, c.name AS categoryName, c.slug AS categorySlug
-       FROM products p JOIN categories c ON c.id = p.category_id
-       WHERE ${conditions.join(" AND ")} ORDER BY p.id`, values,
+      `SELECT p.ma AS id, p.ten AS name, p.ten_duong_dan AS slug, p.mo_ta_ngan AS shortDescription,
+              p.thong_so AS specifications, p.gia_vnd AS priceVnd,
+              p.gia_niem_yet_vnd AS compareAtVnd, p.ton_kho AS stock,
+              p.duong_dan_anh AS imageUrl, c.ten AS categoryName, c.ten_duong_dan AS categorySlug
+       FROM san_pham p JOIN danh_muc c ON c.ma = p.ma_danh_muc
+       WHERE ${conditions.join(" AND ")} ORDER BY p.ma`, values,
     );
     response.json({ products: rows });
   } catch {
@@ -233,7 +233,7 @@ app.post("/api/auth/register", async (request, response) => {
   try {
     const hash = await bcrypt.hash(password, 12);
     const [result] = await pool.execute(
-      "INSERT INTO users (full_name, phone, email, username, address, password_hash) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO nguoi_dung (ho_ten, so_dien_thoai, thu_dien_tu, ten_dang_nhap, dia_chi, mat_khau_bam) VALUES (?, ?, ?, ?, ?, ?)",
       [fullName, phone, email, username, address, hash],
     );
     await new Promise((resolve, reject) => request.session.regenerate((error) => error ? reject(error) : resolve()));
@@ -250,7 +250,7 @@ app.post("/api/auth/login", loginLimiter, async (request, response) => {
   const password = typeof request.body?.password === "string" ? request.body.password : "";
   try {
     const [rows] = await pool.execute(
-      "SELECT id, full_name, phone, email, address, username, password_hash, role FROM users WHERE username = ? OR email = ? LIMIT 1",
+      "SELECT ma AS id, ho_ten AS full_name, so_dien_thoai AS phone, thu_dien_tu AS email, dia_chi AS address, ten_dang_nhap AS username, mat_khau_bam AS password_hash, vai_tro AS role FROM nguoi_dung WHERE ten_dang_nhap = ? OR thu_dien_tu = ? LIMIT 1",
       [username, username.toLowerCase()],
     );
     const user = rows[0];
@@ -309,7 +309,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
     let subtotal = 0;
     for (const [productId, quantity] of [...quantities.entries()].sort(([a], [b]) => a - b)) {
       const [rows] = await connection.execute(
-        "SELECT id, name, price_vnd AS priceVnd, stock FROM products WHERE id = ? AND is_active = TRUE FOR UPDATE", [productId],
+        "SELECT ma AS id, ten AS name, gia_vnd AS priceVnd, ton_kho AS stock FROM san_pham WHERE ma = ? AND dang_hoat_dong = TRUE FOR UPDATE", [productId],
       );
       const product = rows[0];
       if (!product) throw Object.assign(new Error("Một sản phẩm không còn được bán."), { status: 409 });
@@ -317,7 +317,7 @@ app.post("/api/orders", requireUser, async (request, response) => {
       const unitPrice = Number(product.priceVnd);
       subtotal += unitPrice * quantity;
       items.push({ productId: product.id, productName: product.name, unitPrice, quantity });
-      await connection.execute("UPDATE products SET stock = stock - ? WHERE id = ?", [quantity, product.id]);
+      await connection.execute("UPDATE san_pham SET ton_kho = ton_kho - ? WHERE ma = ?", [quantity, product.id]);
     }
     const orderCode = makeOrderCode();
     const transactionRef = paymentMethod === "vnpay" ? makeVnpayReference(orderCode) : null;
@@ -334,31 +334,31 @@ app.post("/api/orders", requireUser, async (request, response) => {
     });
     const orderDigest = keccak256(toUtf8Bytes(digestPayload));
     const [insert] = await connection.execute(
-      `INSERT INTO orders
-        (order_code, user_id, subtotal_vnd, shipping_fee_vnd, total_vnd, payment_method,
-         order_status, shipping_name, shipping_phone, shipping_address, customer_note,
-         blockchain_key, blockchain_digest, created_at)
+      `INSERT INTO don_hang
+        (ma_don, ma_nguoi_dung, tam_tinh_vnd, phi_giao_hang_vnd, tong_tien_vnd, phuong_thuc_thanh_toan,
+         trang_thai_don, ten_nguoi_nhan, so_dien_thoai_nhan, dia_chi_nhan, ghi_chu_khach,
+         khoa_don_blockchain, ma_bam_hoa_don, tao_luc)
        VALUES (?, ?, ?, 0, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
       [orderCode, request.session.user.id, subtotal, subtotal, paymentMethod,
         shippingName, shippingPhone, shippingAddress, note || null, orderKey, orderDigest, createdAt],
     );
     for (const item of items) {
       await connection.execute(
-        "INSERT INTO order_items (order_id, product_id, product_name, unit_price_vnd, quantity) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO chi_tiet_don_hang (ma_don_hang, ma_san_pham, ten_san_pham, don_gia_vnd, so_luong) VALUES (?, ?, ?, ?, ?)",
         [insert.insertId, item.productId, item.productName, item.unitPrice, item.quantity],
       );
     }
     await enqueueOrderProof(connection, insert.insertId, "pending");
     if (paymentMethod === "crypto") {
       await connection.execute(
-        "INSERT INTO crypto_payments (order_id, chain_id, amount_wei) VALUES (?, ?, ?)",
+        "INSERT INTO thanh_toan_eth (ma_don_hang, ma_mang, so_tien_wei) VALUES (?, ?, ?)",
         [insert.insertId, chainId, cryptoAmountWei],
       );
     }
     let paymentUrl = null;
     if (paymentMethod === "vnpay") {
       await connection.execute(
-        "INSERT INTO payment_attempts (order_id, provider, transaction_ref) VALUES (?, 'vnpay', ?)",
+        "INSERT INTO lan_thanh_toan (ma_don_hang, nha_cung_cap, ma_tham_chieu) VALUES (?, 'vnpay', ?)",
         [insert.insertId, transactionRef],
       );
       paymentUrl = createVnpayUrl({ orderCode: transactionRef, amountVnd: subtotal, clientIp: request.ip || "127.0.0.1" });
@@ -391,10 +391,10 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT order_code AS orderCode, total_vnd AS totalVnd, payment_method AS paymentMethod,
-        payment_status AS paymentStatus, order_status AS orderStatus,
-        cancellation_requested_at AS cancellationRequestedAt
-       FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
+      `SELECT ma_don AS orderCode, tong_tien_vnd AS totalVnd, phuong_thuc_thanh_toan AS paymentMethod,
+        trang_thai_thanh_toan AS paymentStatus, trang_thai_don AS orderStatus,
+        yeu_cau_huy_luc AS cancellationRequestedAt
+       FROM don_hang WHERE ma = ? AND ma_nguoi_dung = ? FOR UPDATE`, [id, request.session.user.id],
     );
     const order = rows[0];
     if (!order) {
@@ -412,9 +412,9 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
       return response.status(409).json({ error: "Đơn hàng hiện không thể thanh toán lại." });
     }
     const [activeAttempts] = await connection.execute(
-      `SELECT id FROM payment_attempts
-       WHERE order_id = ? AND provider = 'vnpay' AND response_code IS NULL
-         AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
+      `SELECT ma AS id FROM lan_thanh_toan
+       WHERE ma_don_hang = ? AND nha_cung_cap = 'vnpay' AND ma_phan_hoi IS NULL
+         AND tao_luc >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
        LIMIT 1 FOR UPDATE`, [id],
     );
     if (activeAttempts.length) {
@@ -424,10 +424,10 @@ app.post("/api/orders/:id/payments/vnpay/retry", requireUser, async (request, re
     const transactionRef = makeVnpayReference(order.orderCode);
     const paymentUrl = createVnpayUrl({ orderCode: transactionRef, amountVnd: order.totalVnd, clientIp: request.ip || "127.0.0.1" });
     await connection.execute(
-      "INSERT INTO payment_attempts (order_id, provider, transaction_ref) VALUES (?, 'vnpay', ?)", [id, transactionRef],
+      "INSERT INTO lan_thanh_toan (ma_don_hang, nha_cung_cap, ma_tham_chieu) VALUES (?, 'vnpay', ?)", [id, transactionRef],
     );
     if (order.paymentStatus === "failed") {
-      await connection.execute("UPDATE orders SET payment_status = 'unpaid' WHERE id = ?", [id]);
+      await connection.execute("UPDATE don_hang SET trang_thai_thanh_toan = 'unpaid' WHERE ma = ?", [id]);
     }
     await connection.commit();
     response.json({ paymentUrl });
@@ -445,12 +445,12 @@ app.post("/api/orders/:id/payments/crypto/retry", requireUser, async (request, r
   let provider;
   try {
     const [rows] = await pool.execute(
-      `SELECT o.order_code AS orderCode, o.payment_method AS paymentMethod,
-        o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-        o.cancellation_requested_at AS cancellationRequestedAt, o.blockchain_key AS blockchainKey,
-        o.blockchain_digest AS blockchainDigest, cp.amount_wei AS amountWei, cp.status AS cryptoStatus
-       FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.id = ? AND o.user_id = ? LIMIT 1`, [id, request.session.user.id],
+      `SELECT o.ma_don AS orderCode, o.phuong_thuc_thanh_toan AS paymentMethod,
+        o.trang_thai_thanh_toan AS paymentStatus, o.trang_thai_don AS orderStatus,
+        o.yeu_cau_huy_luc AS cancellationRequestedAt, o.khoa_don_blockchain AS blockchainKey,
+        o.ma_bam_hoa_don AS blockchainDigest, cp.so_tien_wei AS amountWei, cp.trang_thai AS cryptoStatus
+       FROM don_hang o JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       WHERE o.ma = ? AND o.ma_nguoi_dung = ? LIMIT 1`, [id, request.session.user.id],
     );
     const order = rows[0];
     if (!order) return response.status(404).json({ error: "Không tìm thấy đơn hàng." });
@@ -489,11 +489,11 @@ app.post("/api/orders/:id/payments/crypto/confirm", requireUser, async (request,
   let provider;
   try {
     const [rows] = await pool.execute(
-      `SELECT o.order_code AS orderCode, o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-        o.blockchain_key AS blockchainKey, o.blockchain_digest AS blockchainDigest,
-        cp.amount_wei AS amountWei, cp.payment_tx_hash AS paymentTxHash, cp.status AS cryptoStatus
-       FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.id = ? AND o.user_id = ? AND o.payment_method = 'crypto' LIMIT 1`, [id, request.session.user.id],
+      `SELECT o.ma_don AS orderCode, o.trang_thai_thanh_toan AS paymentStatus, o.trang_thai_don AS orderStatus,
+        o.khoa_don_blockchain AS blockchainKey, o.ma_bam_hoa_don AS blockchainDigest,
+        cp.so_tien_wei AS amountWei, cp.ma_giao_dich_thanh_toan AS paymentTxHash, cp.trang_thai AS cryptoStatus
+       FROM don_hang o JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       WHERE o.ma = ? AND o.ma_nguoi_dung = ? AND o.phuong_thuc_thanh_toan = 'crypto' LIMIT 1`, [id, request.session.user.id],
     );
     const order = rows[0];
     if (!order) return response.status(404).json({ error: "Không tìm thấy đơn hàng thanh toán bằng ETH." });
@@ -527,8 +527,8 @@ app.post("/api/orders/:id/cancellation-request", requireUser, async (request, re
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT order_status AS orderStatus, cancellation_requested_at AS cancellationRequestedAt
-       FROM orders WHERE id = ? AND user_id = ? FOR UPDATE`, [id, request.session.user.id],
+      `SELECT trang_thai_don AS orderStatus, yeu_cau_huy_luc AS cancellationRequestedAt
+       FROM don_hang WHERE ma = ? AND ma_nguoi_dung = ? FOR UPDATE`, [id, request.session.user.id],
     );
     const order = rows[0];
     if (!order) {
@@ -540,7 +540,7 @@ app.post("/api/orders/:id/cancellation-request", requireUser, async (request, re
       return response.status(409).json({ error: "Đơn hàng đã chuyển sang giao hàng nên không thể gửi yêu cầu hủy." });
     }
     if (!order.cancellationRequestedAt) {
-      await connection.execute("UPDATE orders SET cancellation_requested_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
+      await connection.execute("UPDATE don_hang SET yeu_cau_huy_luc = CURRENT_TIMESTAMP WHERE ma = ?", [id]);
     }
     await connection.commit();
     response.json({ ok: true });
@@ -555,18 +555,18 @@ app.post("/api/orders/:id/cancellation-request", requireUser, async (request, re
 app.get("/api/orders", requireUser, async (request, response) => {
   try {
     const [orders] = await pool.execute(
-      `SELECT o.id, o.order_code AS orderCode, o.total_vnd AS totalVnd, o.payment_method AS paymentMethod,
-        o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-        o.cancellation_requested_at AS cancellationRequestedAt, o.created_at AS createdAt,
-        (SELECT MAX(DATE_ADD(pa.created_at, INTERVAL 15 MINUTE))
-         FROM payment_attempts pa
-         WHERE pa.order_id = o.id AND pa.provider = 'vnpay' AND pa.response_code IS NULL) AS vnpayPendingUntil,
-        cp.amount_wei AS cryptoAmountWei, cp.status AS cryptoStatus,
-        cp.buyer_address AS cryptoBuyerAddress, cp.payment_tx_hash AS cryptoPaymentTxHash,
-        cp.ship_tx_hash AS cryptoShipTxHash, cp.release_tx_hash AS cryptoReleaseTxHash,
-        cp.refund_tx_hash AS cryptoRefundTxHash
-       FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.user_id = ? ORDER BY o.created_at DESC LIMIT 50`, [request.session.user.id],
+      `SELECT o.ma AS id, o.ma_don AS orderCode, o.tong_tien_vnd AS totalVnd, o.phuong_thuc_thanh_toan AS paymentMethod,
+        o.trang_thai_thanh_toan AS paymentStatus, o.trang_thai_don AS orderStatus,
+        o.yeu_cau_huy_luc AS cancellationRequestedAt, o.tao_luc AS createdAt,
+        (SELECT MAX(DATE_ADD(pa.tao_luc, INTERVAL 15 MINUTE))
+         FROM lan_thanh_toan pa
+         WHERE pa.ma_don_hang = o.ma AND pa.nha_cung_cap = 'vnpay' AND pa.ma_phan_hoi IS NULL) AS vnpayPendingUntil,
+        cp.so_tien_wei AS cryptoAmountWei, cp.trang_thai AS cryptoStatus,
+        cp.dia_chi_vi_khach AS cryptoBuyerAddress, cp.ma_giao_dich_thanh_toan AS cryptoPaymentTxHash,
+        cp.ma_giao_dich_giao_hang AS cryptoShipTxHash, cp.ma_giao_dich_giai_ngan AS cryptoReleaseTxHash,
+        cp.ma_giao_dich_hoan_tien AS cryptoRefundTxHash
+       FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       WHERE o.ma_nguoi_dung = ? ORDER BY o.tao_luc DESC LIMIT 50`, [request.session.user.id],
     );
     response.json({ orders: await attachOrderItems(orders) });
   } catch {
@@ -579,8 +579,8 @@ async function attachOrderItems(orders) {
   const ids = orders.map((order) => order.id);
   const placeholders = ids.map(() => "?").join(", ");
   const [items] = await pool.execute(
-    `SELECT order_id AS orderId, product_name AS productName, unit_price_vnd AS unitPriceVnd, quantity
-     FROM order_items WHERE order_id IN (${placeholders}) ORDER BY order_id, id`, ids,
+    `SELECT ma_don_hang AS orderId, ten_san_pham AS productName, don_gia_vnd AS unitPriceVnd, so_luong AS quantity
+     FROM chi_tiet_don_hang WHERE ma_don_hang IN (${placeholders}) ORDER BY ma_don_hang, ma`, ids,
   );
   const byOrder = new Map();
   for (const item of items) {
@@ -666,27 +666,27 @@ app.get("/api/payments/vnpay/ipn", async (request, response) => {
 app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, response) => {
   try {
     const [orders] = await pool.execute(
-      `SELECT o.id, o.order_code AS orderCode, o.total_vnd AS totalVnd, o.payment_method AS paymentMethod,
-        o.payment_status AS paymentStatus, o.order_status AS orderStatus, o.shipping_name AS shippingName,
-        o.shipping_phone AS shippingPhone, o.shipping_address AS shippingAddress,
-        o.cancellation_requested_at AS cancellationRequestedAt, o.blockchain_key AS blockchainKey,
-        o.blockchain_digest AS blockchainDigest, o.blockchain_tx_hash AS blockchainTxHash,
-        o.blockchain_status AS blockchainStatus, o.created_at AS createdAt,
-        CASE WHEN j.tx_hash IS NULL AND j.id IS NOT NULL THEN
-          CASE WHEN j.attempts > 0 THEN 'error' ELSE 'pending' END
+      `SELECT o.ma AS id, o.ma_don AS orderCode, o.tong_tien_vnd AS totalVnd, o.phuong_thuc_thanh_toan AS paymentMethod,
+        o.trang_thai_thanh_toan AS paymentStatus, o.trang_thai_don AS orderStatus, o.ten_nguoi_nhan AS shippingName,
+        o.so_dien_thoai_nhan AS shippingPhone, o.dia_chi_nhan AS shippingAddress,
+        o.yeu_cau_huy_luc AS cancellationRequestedAt, o.khoa_don_blockchain AS blockchainKey,
+        o.ma_bam_hoa_don AS blockchainDigest, o.ma_giao_dich_blockchain AS blockchainTxHash,
+        o.trang_thai_blockchain AS blockchainStatus, o.tao_luc AS createdAt,
+        CASE WHEN j.ma_giao_dich IS NULL AND j.ma IS NOT NULL THEN
+          CASE WHEN j.so_lan_thu > 0 THEN 'error' ELSE 'pending' END
         ELSE NULL END AS blockchainSync,
-        (SELECT MAX(DATE_ADD(pa.created_at, INTERVAL 15 MINUTE))
-         FROM payment_attempts pa
-         WHERE pa.order_id = o.id AND pa.provider = 'vnpay' AND pa.response_code IS NULL) AS vnpayPendingUntil,
-        cp.amount_wei AS cryptoAmountWei, cp.status AS cryptoStatus,
-        cp.buyer_address AS cryptoBuyerAddress, cp.payment_tx_hash AS cryptoPaymentTxHash,
-        cp.ship_tx_hash AS cryptoShipTxHash, cp.release_tx_hash AS cryptoReleaseTxHash,
-        cp.refund_tx_hash AS cryptoRefundTxHash,
-        cp.cancel_tx_hash AS cryptoCancelTxHash
-       FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id
-       LEFT JOIN blockchain_order_jobs j ON j.order_id = o.id
-         AND j.order_status = FIELD(o.order_status, 'pending', 'confirmed', 'packing', 'shipped', 'delivered', 'cancelled')
-       ORDER BY o.created_at DESC LIMIT 100`,
+        (SELECT MAX(DATE_ADD(pa.tao_luc, INTERVAL 15 MINUTE))
+         FROM lan_thanh_toan pa
+         WHERE pa.ma_don_hang = o.ma AND pa.nha_cung_cap = 'vnpay' AND pa.ma_phan_hoi IS NULL) AS vnpayPendingUntil,
+        cp.so_tien_wei AS cryptoAmountWei, cp.trang_thai AS cryptoStatus,
+        cp.dia_chi_vi_khach AS cryptoBuyerAddress, cp.ma_giao_dich_thanh_toan AS cryptoPaymentTxHash,
+        cp.ma_giao_dich_giao_hang AS cryptoShipTxHash, cp.ma_giao_dich_giai_ngan AS cryptoReleaseTxHash,
+        cp.ma_giao_dich_hoan_tien AS cryptoRefundTxHash,
+        cp.ma_giao_dich_huy AS cryptoCancelTxHash
+       FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       LEFT JOIN tac_vu_blockchain j ON j.ma_don_hang = o.ma
+         AND j.trang_thai_don = FIELD(o.trang_thai_don, 'pending', 'confirmed', 'packing', 'shipped', 'delivered', 'cancelled')
+       ORDER BY o.tao_luc DESC LIMIT 100`,
     );
     for (const order of orders) order.nextOrderStatuses = [...orderTransitions[order.orderStatus]];
     await checkStoredOrderProofs(orders);
@@ -716,12 +716,12 @@ app.get("/api/admin/blockchain/transactions/:hash", requireUser, requireAdmin, a
 app.get("/api/admin/users", requireUser, requireAdmin, async (_request, response) => {
   try {
     const [users] = await pool.execute(
-      `SELECT u.id, u.full_name AS fullName, u.username, u.phone, u.email, u.address,
-        u.created_at AS createdAt, COUNT(o.id) AS orderCount
-       FROM users u LEFT JOIN orders o ON o.user_id = u.id
-       WHERE u.role = 'customer'
-       GROUP BY u.id, u.full_name, u.username, u.phone, u.email, u.address, u.created_at
-       ORDER BY u.created_at DESC LIMIT 500`,
+      `SELECT u.ma AS id, u.ho_ten AS fullName, u.ten_dang_nhap AS username, u.so_dien_thoai AS phone, u.thu_dien_tu AS email, u.dia_chi AS address,
+        u.tao_luc AS createdAt, COUNT(o.ma) AS orderCount
+       FROM nguoi_dung u LEFT JOIN don_hang o ON o.ma_nguoi_dung = u.ma
+       WHERE u.vai_tro = 'customer'
+       GROUP BY u.ma, u.ho_ten, u.ten_dang_nhap, u.so_dien_thoai, u.thu_dien_tu, u.dia_chi, u.tao_luc
+       ORDER BY u.tao_luc DESC LIMIT 500`,
     );
     response.json({ users });
   } catch {
@@ -741,11 +741,11 @@ app.patch("/api/admin/users/:id", requireUser, requireAdmin, async (request, res
   }
   try {
     const [result] = await pool.execute(
-      "UPDATE users SET full_name = ?, phone = ?, email = ?, address = ? WHERE id = ? AND role = 'customer'",
+      "UPDATE nguoi_dung SET ho_ten = ?, so_dien_thoai = ?, thu_dien_tu = ?, dia_chi = ? WHERE ma = ? AND vai_tro = 'customer'",
       [fullName, phone, email, address || null, id],
     );
     if (result.affectedRows) return response.json({ ok: true });
-    const [rows] = await pool.execute("SELECT id FROM users WHERE id = ? AND role = 'customer' LIMIT 1", [id]);
+    const [rows] = await pool.execute("SELECT ma AS id FROM nguoi_dung WHERE ma = ? AND vai_tro = 'customer' LIMIT 1", [id]);
     if (rows.length) return response.json({ ok: true });
     response.status(404).json({ error: "Không tìm thấy người dùng." });
   } catch (error) {
@@ -763,9 +763,9 @@ app.post("/api/admin/orders/:id/payments/vnpay/refund-confirmation", requireUser
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT payment_method AS paymentMethod, payment_status AS paymentStatus,
-        order_status AS orderStatus
-       FROM orders WHERE id = ? FOR UPDATE`, [id],
+      `SELECT phuong_thuc_thanh_toan AS paymentMethod, trang_thai_thanh_toan AS paymentStatus,
+        trang_thai_don AS orderStatus
+       FROM don_hang WHERE ma = ? FOR UPDATE`, [id],
     );
     const order = rows[0];
     if (!order || order.paymentMethod !== "vnpay" || order.orderStatus !== "cancelled") {
@@ -780,7 +780,7 @@ app.post("/api/admin/orders/:id/payments/vnpay/refund-confirmation", requireUser
       await connection.rollback();
       return response.status(409).json({ error: "Đơn chưa có khoản VNPay thành công cần hoàn." });
     }
-    await connection.execute("UPDATE orders SET payment_status = 'refunded' WHERE id = ?", [id]);
+    await connection.execute("UPDATE don_hang SET trang_thai_thanh_toan = 'refunded' WHERE ma = ?", [id]);
     await connection.commit();
     response.json({ ok: true });
   } catch {
@@ -803,11 +803,11 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT o.order_status AS orderStatus, o.payment_status AS paymentStatus, o.payment_method AS paymentMethod,
-        o.cancellation_requested_at AS cancellationRequestedAt, o.blockchain_key AS blockchainKey,
-        o.blockchain_digest AS blockchainDigest, cp.amount_wei AS amountWei, cp.status AS cryptoStatus,
-        cp.payment_tx_hash AS paymentTxHash
-       FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id WHERE o.id = ? FOR UPDATE`, [id],
+      `SELECT o.trang_thai_don AS orderStatus, o.trang_thai_thanh_toan AS paymentStatus, o.phuong_thuc_thanh_toan AS paymentMethod,
+        o.yeu_cau_huy_luc AS cancellationRequestedAt, o.khoa_don_blockchain AS blockchainKey,
+        o.ma_bam_hoa_don AS blockchainDigest, cp.so_tien_wei AS amountWei, cp.trang_thai AS cryptoStatus,
+        cp.ma_giao_dich_thanh_toan AS paymentTxHash
+       FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma WHERE o.ma = ? FOR UPDATE`, [id],
     );
     const order = rows[0];
     if (!order) {
@@ -826,9 +826,9 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
       if (orderStatus === "cancelled" && order.orderStatus !== "cancelled"
           && order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)) {
         const [activeAttempts] = await connection.execute(
-          `SELECT id FROM payment_attempts
-           WHERE order_id = ? AND provider = 'vnpay' AND response_code IS NULL
-             AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
+          `SELECT ma AS id FROM lan_thanh_toan
+           WHERE ma_don_hang = ? AND nha_cung_cap = 'vnpay' AND ma_phan_hoi IS NULL
+             AND tao_luc >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
            LIMIT 1 FOR UPDATE`, [id],
         );
         if (activeAttempts.length) {
@@ -857,8 +857,8 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
         const method = shipping ? "markShipped" : "releaseOrder";
         const txHash = await writeEscrowAction(order, method);
         const sql = shipping
-          ? "UPDATE crypto_payments SET status = 'shipped', ship_tx_hash = ? WHERE order_id = ?"
-          : "UPDATE crypto_payments SET status = 'released', release_tx_hash = ? WHERE order_id = ?";
+          ? "UPDATE thanh_toan_eth SET trang_thai = 'shipped', ma_giao_dich_giao_hang = ? WHERE ma_don_hang = ?"
+          : "UPDATE thanh_toan_eth SET trang_thai = 'released', ma_giao_dich_giai_ngan = ? WHERE ma_don_hang = ?";
         await connection.execute(sql, [txHash, id]);
       }
       if (orderStatus === "cancelled" && order.orderStatus !== "cancelled") {
@@ -871,13 +871,13 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
           return response.status(409).json({ error: "Đơn đã giao cho vận chuyển nên không thể hủy ở đây." });
         }
         const [items] = await connection.execute(
-          "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [id],
+          "SELECT ma_san_pham AS productId, so_luong AS quantity FROM chi_tiet_don_hang WHERE ma_don_hang = ?", [id],
         );
         for (const item of items) {
-          if (item.productId != null) await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
+          if (item.productId != null) await connection.execute("UPDATE san_pham SET ton_kho = ton_kho + ? WHERE ma = ?", [item.quantity, item.productId]);
         }
       }
-      await connection.execute("UPDATE orders SET order_status = ? WHERE id = ?", [orderStatus, id]);
+      await connection.execute("UPDATE don_hang SET trang_thai_don = ? WHERE ma = ?", [orderStatus, id]);
       await enqueueOrderProof(connection, id, orderStatus);
     } else {
       if (order.paymentMethod !== "cod") {
@@ -888,7 +888,7 @@ app.patch("/api/admin/orders/:id", requireUser, requireAdmin, async (request, re
         await connection.rollback();
         return response.status(409).json({ error: "Chỉ xác nhận đã thu COD sau khi đơn được giao." });
       }
-      await connection.execute("UPDATE orders SET payment_status = 'paid' WHERE id = ?", [id]);
+      await connection.execute("UPDATE don_hang SET trang_thai_thanh_toan = 'paid' WHERE ma = ?", [id]);
     }
     await connection.commit();
     response.json({ ok: true });
@@ -919,13 +919,13 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
   try {
     await connection.beginTransaction();
     const [rows] = await connection.execute(
-      `SELECT o.order_status AS orderStatus, o.payment_status AS paymentStatus,
-        o.payment_method AS paymentMethod, o.cancellation_requested_at AS cancellationRequestedAt,
-        o.blockchain_key AS blockchainKey, o.blockchain_digest AS blockchainDigest,
-        cp.amount_wei AS amountWei, cp.buyer_address AS buyerAddress, cp.payment_tx_hash AS paymentTxHash,
-        cp.status AS cryptoStatus
-       FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.id = ? FOR UPDATE`, [id],
+      `SELECT o.trang_thai_don AS orderStatus, o.trang_thai_thanh_toan AS paymentStatus,
+        o.phuong_thuc_thanh_toan AS paymentMethod, o.yeu_cau_huy_luc AS cancellationRequestedAt,
+        o.khoa_don_blockchain AS blockchainKey, o.ma_bam_hoa_don AS blockchainDigest,
+        cp.so_tien_wei AS amountWei, cp.dia_chi_vi_khach AS buyerAddress, cp.ma_giao_dich_thanh_toan AS paymentTxHash,
+        cp.trang_thai AS cryptoStatus
+       FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       WHERE o.ma = ? FOR UPDATE`, [id],
     );
     const order = rows[0];
     if (!order) {
@@ -949,13 +949,13 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
         await connection.rollback();
         return response.status(409).json({ error: "Hợp đồng đã xử lý hủy. Hãy duyệt hủy để cập nhật đơn." });
       }
-      await connection.execute("UPDATE orders SET cancellation_requested_at = NULL WHERE id = ?", [id]);
+      await connection.execute("UPDATE don_hang SET yeu_cau_huy_luc = NULL WHERE ma = ?", [id]);
     } else {
       if (order.paymentMethod === "vnpay" && ["unpaid", "failed"].includes(order.paymentStatus)) {
         const [activeAttempts] = await connection.execute(
-          `SELECT id FROM payment_attempts
-           WHERE order_id = ? AND provider = 'vnpay' AND response_code IS NULL
-             AND created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
+          `SELECT ma AS id FROM lan_thanh_toan
+           WHERE ma_don_hang = ? AND nha_cung_cap = 'vnpay' AND ma_phan_hoi IS NULL
+             AND tao_luc >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE)
            LIMIT 1 FOR UPDATE`, [id],
         );
         if (activeAttempts.length) {
@@ -966,10 +966,10 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
       if (order.paymentMethod === "crypto") {
         if (order.paymentStatus === "paid" && order.cryptoStatus === "escrowed") {
           const txHash = await writeEscrowAction(order, "refundOrder");
-          await connection.execute("UPDATE crypto_payments SET status = 'refunded', refund_tx_hash = ? WHERE order_id = ?", [txHash, id]);
+          await connection.execute("UPDATE thanh_toan_eth SET trang_thai = 'refunded', ma_giao_dich_hoan_tien = ? WHERE ma_don_hang = ?", [txHash, id]);
         } else if (order.paymentStatus === "unpaid" && order.cryptoStatus === "unpaid") {
           const txHash = await writeEscrowAction(order, "cancelUnpaidOrder");
-          await connection.execute("UPDATE crypto_payments SET status = 'cancelled', cancel_tx_hash = ? WHERE order_id = ?", [txHash, id]);
+          await connection.execute("UPDATE thanh_toan_eth SET trang_thai = 'cancelled', ma_giao_dich_huy = ? WHERE ma_don_hang = ?", [txHash, id]);
         } else if (!["refunded", "cancelled"].includes(order.cryptoStatus)) {
           throw Object.assign(new Error("Trạng thái ETH chưa phù hợp để hủy đơn."), { status: 409 });
         }
@@ -979,17 +979,17 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
         return response.status(409).json({ error: "Hãy xác nhận đã xử lý hoàn tiền trước khi duyệt hủy đơn đã thanh toán." });
       }
       const [items] = await connection.execute(
-        "SELECT product_id AS productId, quantity FROM order_items WHERE order_id = ?", [id],
+        "SELECT ma_san_pham AS productId, so_luong AS quantity FROM chi_tiet_don_hang WHERE ma_don_hang = ?", [id],
       );
       for (const item of items) {
         if (item.productId != null) {
-          await connection.execute("UPDATE products SET stock = stock + ? WHERE id = ?", [item.quantity, item.productId]);
+          await connection.execute("UPDATE san_pham SET ton_kho = ton_kho + ? WHERE ma = ?", [item.quantity, item.productId]);
         }
       }
       await connection.execute(
-        `UPDATE orders SET order_status = 'cancelled',
-          payment_status = CASE WHEN payment_status = 'paid' THEN 'refunded' ELSE payment_status END,
-          cancellation_requested_at = NULL WHERE id = ?`, [id],
+        `UPDATE don_hang SET trang_thai_don = 'cancelled',
+          trang_thai_thanh_toan = CASE WHEN trang_thai_thanh_toan = 'paid' THEN 'refunded' ELSE trang_thai_thanh_toan END,
+          yeu_cau_huy_luc = NULL WHERE ma = ?`, [id],
       );
       await enqueueOrderProof(connection, id, "cancelled");
     }
@@ -1005,7 +1005,7 @@ app.post("/api/admin/orders/:id/cancellation-request", requireUser, requireAdmin
 
 app.get("/api/admin/categories", requireUser, requireAdmin, async (_request, response) => {
   try {
-    const [categories] = await pool.execute("SELECT id, name, slug, description FROM categories ORDER BY name");
+    const [categories] = await pool.execute("SELECT ma AS id, ten AS name, ten_duong_dan AS slug, mo_ta AS description FROM danh_muc ORDER BY ten");
     response.json({ categories });
   } catch {
     response.status(503).json({ error: "Chưa đọc được danh mục." });
@@ -1025,7 +1025,7 @@ app.post("/api/admin/categories", requireUser, requireAdmin, async (request, res
   if (data.error) return response.status(400).json({ error: data.error });
   try {
     const [result] = await pool.execute(
-      "INSERT INTO categories (name, slug, description) VALUES (?, ?, ?)",
+      "INSERT INTO danh_muc (ten, ten_duong_dan, mo_ta) VALUES (?, ?, ?)",
       [data.name, data.slug, data.description || null],
     );
     response.status(201).json({ id: result.insertId });
@@ -1042,10 +1042,10 @@ app.patch("/api/admin/categories/:id", requireUser, requireAdmin, async (request
   const data = categoryInput(request.body);
   if (data.error) return response.status(400).json({ error: data.error });
   try {
-    const [existing] = await pool.execute("SELECT id FROM categories WHERE id = ? LIMIT 1", [id]);
+    const [existing] = await pool.execute("SELECT ma AS id FROM danh_muc WHERE ma = ? LIMIT 1", [id]);
     if (!existing.length) return response.status(404).json({ error: "Không tìm thấy danh mục." });
     await pool.execute(
-      "UPDATE categories SET name = ?, slug = ?, description = ? WHERE id = ?",
+      "UPDATE danh_muc SET ten = ?, ten_duong_dan = ?, mo_ta = ? WHERE ma = ?",
       [data.name, data.slug, data.description || null, id],
     );
     response.json({ ok: true });
@@ -1059,7 +1059,7 @@ app.patch("/api/admin/categories/:id", requireUser, requireAdmin, async (request
 app.get("/api/admin/products", requireUser, requireAdmin, async (_request, response) => {
   try {
     const [products] = await pool.execute(
-      "SELECT id, name, slug, category_id AS categoryId, price_vnd AS priceVnd, compare_at_vnd AS compareAtVnd, stock, short_description AS shortDescription, image_url AS imageUrl, specifications, is_active AS isActive FROM products ORDER BY id DESC",
+      "SELECT ma AS id, ten AS name, ten_duong_dan AS slug, ma_danh_muc AS categoryId, gia_vnd AS priceVnd, gia_niem_yet_vnd AS compareAtVnd, ton_kho AS stock, mo_ta_ngan AS shortDescription, duong_dan_anh AS imageUrl, thong_so AS specifications, dang_hoat_dong AS isActive FROM san_pham ORDER BY ma DESC",
     );
     response.json({ products });
   } catch {
@@ -1091,7 +1091,7 @@ app.post("/api/admin/products", requireUser, requireAdmin, async (request, respo
   if (data.error) return response.status(400).json({ error: data.error });
   try {
     const [result] = await pool.execute(
-      `INSERT INTO products (category_id, name, slug, short_description, specifications, price_vnd, compare_at_vnd, stock, image_url)
+      `INSERT INTO san_pham (ma_danh_muc, ten, ten_duong_dan, mo_ta_ngan, thong_so, gia_vnd, gia_niem_yet_vnd, ton_kho, duong_dan_anh)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.stock, data.imageUrl],
     );
@@ -1106,7 +1106,7 @@ app.patch("/api/admin/products/:id", requireUser, requireAdmin, async (request, 
   if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Mã sản phẩm không hợp lệ." });
   if (typeof request.body?.isActive === "boolean") {
     try {
-      const [result] = await pool.execute("UPDATE products SET is_active = ? WHERE id = ?", [request.body.isActive, id]);
+      const [result] = await pool.execute("UPDATE san_pham SET dang_hoat_dong = ? WHERE ma = ?", [request.body.isActive, id]);
       return result.affectedRows ? response.json({ ok: true }) : response.status(404).json({ error: "Không tìm thấy sản phẩm." });
     } catch {
       return response.status(503).json({ error: "Chưa cập nhật được sản phẩm." });
@@ -1116,8 +1116,8 @@ app.patch("/api/admin/products/:id", requireUser, requireAdmin, async (request, 
   if (data.error) return response.status(400).json({ error: data.error });
   try {
     const [result] = await pool.execute(
-      `UPDATE products SET category_id = ?, name = ?, slug = ?, short_description = ?, specifications = ?,
-       price_vnd = ?, compare_at_vnd = ?, stock = ?, image_url = ? WHERE id = ?`,
+      `UPDATE san_pham SET ma_danh_muc = ?, ten = ?, ten_duong_dan = ?, mo_ta_ngan = ?, thong_so = ?,
+       gia_vnd = ?, gia_niem_yet_vnd = ?, ton_kho = ?, duong_dan_anh = ? WHERE ma = ?`,
       [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.stock, data.imageUrl, id],
     );
     response.json({ ok: Boolean(result.affectedRows) });

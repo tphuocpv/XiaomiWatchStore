@@ -24,7 +24,7 @@ export function getBlockchainAutomationStatus() {
 
 export async function enqueueOrderProof(connection, orderId, status) {
   await connection.execute(
-    "INSERT IGNORE INTO blockchain_order_jobs (order_id, order_status) VALUES (?, ?)",
+    "INSERT IGNORE INTO tac_vu_blockchain (ma_don_hang, trang_thai_don) VALUES (?, ?)",
     [orderId, orderStatusCode[status]],
   );
 }
@@ -34,9 +34,9 @@ export async function persistEscrowPayment(orderId, payment) {
   try {
     await connection.beginTransaction();
     const [[order]] = await connection.execute(
-      `SELECT o.payment_status AS paymentStatus, o.order_status AS orderStatus,
-        cp.status AS cryptoStatus, cp.payment_tx_hash AS paymentTxHash
-       FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id WHERE o.id = ? FOR UPDATE`, [orderId],
+      `SELECT o.trang_thai_thanh_toan AS paymentStatus, o.trang_thai_don AS orderStatus,
+        cp.trang_thai AS cryptoStatus, cp.ma_giao_dich_thanh_toan AS paymentTxHash
+       FROM don_hang o JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma WHERE o.ma = ? FOR UPDATE`, [orderId],
     );
     if (order?.paymentTxHash?.toLowerCase() === payment.txHash.toLowerCase()) {
       await connection.commit();
@@ -47,10 +47,12 @@ export async function persistEscrowPayment(orderId, payment) {
       throw Object.assign(new Error("Đơn hàng đã thay đổi trạng thái trước khi xác nhận thanh toán."), { status: 409 });
     }
     await connection.execute(
-      "UPDATE orders SET payment_status = 'paid', order_status = CASE WHEN order_status = 'pending' THEN 'confirmed' ELSE order_status END WHERE id = ?", [orderId],
+      `UPDATE don_hang SET trang_thai_thanh_toan = 'paid',
+        trang_thai_don = CASE WHEN trang_thai_don = 'pending' THEN 'confirmed' ELSE trang_thai_don END
+       WHERE ma = ?`, [orderId],
     );
     await connection.execute(
-      "UPDATE crypto_payments SET status = 'escrowed', buyer_address = ?, payment_tx_hash = ? WHERE order_id = ?",
+      "UPDATE thanh_toan_eth SET trang_thai = 'escrowed', dia_chi_vi_khach = ?, ma_giao_dich_thanh_toan = ? WHERE ma_don_hang = ?",
       [payment.buyerAddress, payment.txHash, orderId],
     );
     if (order.orderStatus === "pending") await enqueueOrderProof(connection, orderId, "confirmed");
@@ -132,13 +134,13 @@ async function prepareProofJobs(deployment) {
   if (lastEpoch === deployment.registryBlockHash) return;
   const statuses = Object.keys(orderStatusCode);
   await pool.execute(
-    `INSERT IGNORE INTO blockchain_order_jobs (order_id, order_status)
-     SELECT id, FIELD(order_status, ?, ?, ?, ?, ?, ?) FROM orders
-     WHERE blockchain_key IS NOT NULL AND blockchain_digest IS NOT NULL`, statuses,
+    `INSERT IGNORE INTO tac_vu_blockchain (ma_don_hang, trang_thai_don)
+     SELECT ma, FIELD(trang_thai_don, ?, ?, ?, ?, ?, ?) FROM don_hang
+     WHERE khoa_don_blockchain IS NOT NULL AND ma_bam_hoa_don IS NOT NULL`, statuses,
   );
   await pool.execute(
-    `UPDATE blockchain_order_jobs SET tx_hash = NULL, attempts = 0, retry_at = CURRENT_TIMESTAMP,
-      registry_epoch = NULL WHERE tx_hash IS NOT NULL AND NOT (registry_epoch <=> ?)`, [deployment.registryBlockHash],
+    `UPDATE tac_vu_blockchain SET ma_giao_dich = NULL, so_lan_thu = 0, thu_lai_luc = CURRENT_TIMESTAMP,
+      ma_phien_so_cai = NULL WHERE ma_giao_dich IS NOT NULL AND NOT (ma_phien_so_cai <=> ?)`, [deployment.registryBlockHash],
   );
   buyerSyncBlock = deployment.escrow.blockNumber ?? 0;
   lastEpoch = deployment.registryBlockHash;
@@ -153,10 +155,11 @@ async function syncBuyerPayments(provider, deployment) {
   for (const event of payments) {
     if (!event.args) continue;
     const [[order]] = await pool.execute(
-      `SELECT o.id, o.blockchain_key AS blockchainKey, o.blockchain_digest AS blockchainDigest, cp.amount_wei AS amountWei
-       FROM orders o JOIN crypto_payments cp ON cp.order_id = o.id
-       WHERE o.blockchain_key = ? AND o.payment_status = 'unpaid' AND cp.status = 'unpaid'
-         AND o.order_status IN ('pending', 'confirmed', 'packing') LIMIT 1`,
+      `SELECT o.ma AS id, o.khoa_don_blockchain AS blockchainKey, o.ma_bam_hoa_don AS blockchainDigest,
+         cp.so_tien_wei AS amountWei
+       FROM don_hang o JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+       WHERE o.khoa_don_blockchain = ? AND o.trang_thai_thanh_toan = 'unpaid' AND cp.trang_thai = 'unpaid'
+         AND o.trang_thai_don IN ('pending', 'confirmed', 'packing') LIMIT 1`,
       [event.args.orderKey],
     );
     if (!order) continue;
@@ -174,11 +177,11 @@ async function saveProof(job, txHash, epoch) {
   try {
     await connection.beginTransaction();
     await connection.execute(
-      "UPDATE orders SET blockchain_tx_hash = ?, blockchain_status = ? WHERE id = ? AND order_status = ?",
+      "UPDATE don_hang SET ma_giao_dich_blockchain = ?, trang_thai_blockchain = ? WHERE ma = ? AND trang_thai_don = ?",
       [txHash, job.status, job.orderId, Object.keys(orderStatusCode)[job.status - 1]],
     );
     await connection.execute(
-      "UPDATE blockchain_order_jobs SET tx_hash = ?, registry_epoch = ?, attempts = 0 WHERE id = ?",
+      "UPDATE tac_vu_blockchain SET ma_giao_dich = ?, ma_phien_so_cai = ?, so_lan_thu = 0 WHERE ma = ?",
       [txHash, epoch, job.id],
     );
     await connection.commit();
@@ -203,13 +206,13 @@ async function processProofJobs() {
     });
     automationStatus = { ready: true };
     const [jobs] = await pool.execute(
-      `SELECT j.id, j.order_id AS orderId, j.order_status AS status, j.attempts,
-        o.blockchain_key AS orderKey, o.blockchain_digest AS digest
-       FROM blockchain_order_jobs j JOIN orders o ON o.id = j.order_id
-       WHERE j.tx_hash IS NULL AND j.retry_at <= CURRENT_TIMESTAMP
-         AND NOT EXISTS (SELECT 1 FROM blockchain_order_jobs older
-           WHERE older.order_id = j.order_id AND older.id < j.id AND older.tx_hash IS NULL)
-       ORDER BY j.id LIMIT 12`,
+      `SELECT j.ma AS id, j.ma_don_hang AS orderId, j.trang_thai_don AS status, j.so_lan_thu AS attempts,
+        o.khoa_don_blockchain AS orderKey, o.ma_bam_hoa_don AS digest
+       FROM tac_vu_blockchain j JOIN don_hang o ON o.ma = j.ma_don_hang
+       WHERE j.ma_giao_dich IS NULL AND j.thu_lai_luc <= CURRENT_TIMESTAMP
+         AND NOT EXISTS (SELECT 1 FROM tac_vu_blockchain older
+           WHERE older.ma_don_hang = j.ma_don_hang AND older.ma < j.ma AND older.ma_giao_dich IS NULL)
+       ORDER BY j.ma LIMIT 12`,
     );
     for (const job of jobs) {
       try {
@@ -226,8 +229,9 @@ async function processProofJobs() {
       } catch {
         const retrySeconds = Math.min(60, 2 ** Math.min(6, job.attempts + 1));
         await pool.execute(
-          `UPDATE blockchain_order_jobs
-           SET attempts = LEAST(attempts + 1, 65535), retry_at = TIMESTAMPADD(SECOND, ?, CURRENT_TIMESTAMP) WHERE id = ?`,
+          `UPDATE tac_vu_blockchain
+           SET so_lan_thu = LEAST(so_lan_thu + 1, 65535), thu_lai_luc = TIMESTAMPADD(SECOND, ?, CURRENT_TIMESTAMP)
+           WHERE ma = ?`,
           [retrySeconds, job.id],
         );
       }

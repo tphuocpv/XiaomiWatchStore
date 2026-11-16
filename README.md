@@ -40,7 +40,7 @@ Yêu cầu Node.js 22 trở lên và MySQL. Các lệnh sau chạy trong PowerSh
 
 Mở <http://127.0.0.1:3000> để truy cập cửa hàng. Nếu MySQL dùng cổng hoặc mật khẩu khác, cập nhật các biến `DB_*` trong `.env`.
 
-Sau khi cập nhật mã nguồn, chạy lại `.\npm-local.cmd run db:setup` để áp dụng các thay đổi cấu trúc database.
+Để nâng cấp cơ sở dữ liệu đã cài, dừng máy chủ web, chạy lại `.\npm-local.cmd run db:setup` rồi mở lại web. Lệnh này đổi tên bảng, cột và khóa của MiTime sang tiếng Việt không dấu, đồng thời giữ dữ liệu hiện có. `DB_NAME` trong `.env` cho phép chọn tên cơ sở dữ liệu, mặc định là `xiaomi_watch_store`.
 
 Tài khoản quản trị mặc định: `admin` / `Admin@123456`. Có thể đặt tên đăng nhập và mật khẩu khác trong `.env` trước khi khởi tạo database. Tài khoản đã tạo sẽ giữ nguyên mật khẩu hiện có. Thông tin mặc định chỉ dành cho môi trường trình diễn cục bộ.
 

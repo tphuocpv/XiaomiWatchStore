@@ -93,10 +93,12 @@ export async function readBlockchainTransaction(hash) {
     if (call && (call.name === "anchorOrder" || methods[call.name])) {
       try {
         const [[order]] = await pool.execute(
-          `SELECT o.order_code AS orderCode, cp.payment_tx_hash AS paymentHash, cp.ship_tx_hash AS shippingHash,
-            cp.release_tx_hash AS releaseHash, cp.refund_tx_hash AS refundHash, cp.cancel_tx_hash AS cancellationHash,
-            o.blockchain_tx_hash AS proofHash
-           FROM orders o LEFT JOIN crypto_payments cp ON cp.order_id = o.id WHERE o.blockchain_key = ? LIMIT 1`,
+          `SELECT o.ma_don AS orderCode, cp.ma_giao_dich_thanh_toan AS paymentHash,
+            cp.ma_giao_dich_giao_hang AS shippingHash, cp.ma_giao_dich_giai_ngan AS releaseHash,
+            cp.ma_giao_dich_hoan_tien AS refundHash, cp.ma_giao_dich_huy AS cancellationHash,
+            o.ma_giao_dich_blockchain AS proofHash
+           FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
+           WHERE o.khoa_don_blockchain = ? LIMIT 1`,
           [call.args[0]],
         );
         orderCode = order?.orderCode ?? null;
