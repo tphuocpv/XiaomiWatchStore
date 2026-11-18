@@ -44,8 +44,9 @@
               <button class="active" data-panel="orders" type="button"><span class="nav-icon">▤</span>Đơn hàng</button>
               <button data-panel="users" type="button"><span class="nav-icon">♙</span>Người dùng</button>
               <button data-panel="products" type="button"><span class="nav-icon">◈</span>Sản phẩm</button>
+              <button data-panel="inventory" type="button"><span class="nav-icon">▦</span>Kho hàng</button>
             </nav>
-            <div class="sidebar-note"><strong>VẬN HÀNH CỬA HÀNG</strong><span>Quản lý danh mục, khách hàng và đơn hàng.</span></div>
+            <div class="sidebar-note"><strong>VẬN HÀNH CỬA HÀNG</strong><span>Quản lý sản phẩm, tồn kho, khách hàng và đơn hàng.</span></div>
           </aside>
           <div class="admin-panels">
             <section class="admin-panel" id="orders-panel">
@@ -59,7 +60,7 @@
               <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Khách hàng</th><th>Liên hệ</th><th>Đơn hàng</th><th>Ngày tham gia</th><th></th></tr></thead><tbody id="admin-users"></tbody></table></div>
             </section>
             <section class="admin-panel" id="products-panel" hidden>
-              <div class="admin-section-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2>Sản phẩm</h2><p class="panel-subtitle">Cập nhật danh mục, giá bán, tồn kho và trạng thái hiển thị.</p></div><button id="products-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <div class="admin-section-heading"><div><p class="eyebrow">DANH MỤC HÀNG HÓA</p><h2>Sản phẩm</h2><p class="panel-subtitle">Cập nhật thông tin, danh mục, giá bán và trạng thái hiển thị.</p></div><button id="products-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
               <form id="category-form" class="product-editor">
                 <input type="hidden" name="id">
                 <h3 id="category-form-title">Thêm danh mục</h3>
@@ -78,16 +79,33 @@
                   <label>Danh mục<select name="categoryId" required></select></label>
                   <label>Giá bán (VND)<input name="priceVnd" type="number" min="1" step="1" required></label>
                   <label>Giá niêm yết (VND)<input name="compareAtVnd" type="number" min="1" step="1"></label>
-                  <label>Tồn kho<input name="stock" type="number" min="0" step="1" required></label>
-                  <label>Ảnh sản phẩm<input name="imageUrl" value="/assets/watch-placeholder.svg" placeholder="/assets/xiaomi-watch-s4.jpg" required></label>
+                  <div class="wide-field image-picker">
+                    <label for="product-image-file">Ảnh sản phẩm</label>
+                    <div class="image-picker-control">
+                      <img id="product-image-preview" src="/assets/watch-placeholder.svg" alt="Xem trước ảnh sản phẩm">
+                      <div>
+                        <input id="product-image-file" name="imageFile" type="file" accept="image/jpeg,image/png,image/webp" required>
+                        <small class="form-hint">Chọn ảnh JPG, PNG hoặc WebP từ máy tính. Tối đa 5 MB.</small>
+                      </div>
+                    </div>
+                  </div>
                   <label class="wide-field">Mô tả ngắn<input name="shortDescription" maxlength="500"></label>
                   <label class="wide-field">Thông số kỹ thuật<textarea name="specifications" rows="4">Màn hình: AMOLED 1,43 inch
 Định vị: GNSS tích hợp
 Thời lượng pin: Tối đa 15 ngày</textarea><small class="form-hint">Nhập mỗi thông số trên một dòng theo dạng “Tên thông số: Nội dung”.</small></label>
                 </div>
-                <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span></div>
+                <div class="admin-form-actions"><button class="primary-button" type="submit">Lưu sản phẩm</button><button class="secondary-button" id="product-reset" type="button">Xóa biểu mẫu</button><span id="product-message" role="status"></span><small class="form-hint">Sản phẩm mới bắt đầu với tồn kho 0. Cập nhật số lượng tại mục Kho hàng.</small></div>
               </form>
               <div id="admin-products" class="admin-product-list"></div>
+            </section>
+            <section class="admin-panel" id="inventory-panel" hidden>
+              <div class="admin-section-heading"><div><p class="eyebrow">TỒN KHO</p><h2>Quản lý kho hàng</h2><p class="panel-subtitle">Theo dõi số lượng có thể bán và cập nhật tồn kho từng sản phẩm.</p></div><button id="inventory-reload" class="secondary-button" type="button">↻ Làm mới</button></div>
+              <div class="inventory-metrics">
+                <article><span>Tổng số lượng tồn kho</span><strong id="inventory-total-units">—</strong><small>Tổng số lượng hiện có</small></article>
+                <article><span>Sắp hết hàng</span><strong id="inventory-low-stock">—</strong><small>Còn từ 1 đến 5 sản phẩm</small></article>
+                <article><span>Hết hàng</span><strong id="inventory-out-of-stock">—</strong><small>Sản phẩm đang có số lượng 0</small></article>
+              </div>
+              <div class="admin-table-wrap"><table class="admin-table inventory-table"><thead><tr><th>Sản phẩm</th><th>Trạng thái</th><th>Tồn hiện tại</th><th>Cập nhật số lượng</th></tr></thead><tbody id="admin-inventory"></tbody></table></div>
             </section>
           </div>
         </div>

@@ -168,12 +168,38 @@ function renderProducts() {
 
 function addToCart(id) {
   const product = state.products.find((item) => Number(item.id) === Number(id));
-  if (!product || !product.stock) return;
+  if (!product) {
+    showToast({ title: "Không tìm thấy sản phẩm.", icon: "error" });
+    return;
+  }
+
+  const stock = Number(product.stock);
+  if (!Number.isFinite(stock) || stock <= 0) {
+    showToast({ title: "Sản phẩm hiện đã hết hàng.", icon: "warning" });
+    return;
+  }
+
   const item = state.cart.find((row) => row.id === Number(id));
-  if (item) item.quantity = Math.min(item.quantity + 1, Number(product.stock));
-  else state.cart.push({ id: Number(id), quantity: 1 });
+  if (item && item.quantity >= stock) {
+    showToast({
+      title: "Đã đạt số lượng tối đa.",
+      text: `${product.name} hiện chỉ còn ${stock} sản phẩm trong kho.`,
+      icon: "warning",
+    });
+    return;
+  }
+
+  const quantity = item ? item.quantity + 1 : 1;
+  if (item) item.quantity = quantity;
+  else state.cart.push({ id: Number(id), quantity });
   saveCart();
   renderCart();
+  showToast({
+    title: "Đã thêm vào giỏ hàng.",
+    text: `${product.name} · Số lượng trong giỏ: ${quantity}.`,
+    icon: "success",
+    timer: 2800,
+  });
 }
 
 function changeQuantity(id, delta) {
@@ -408,6 +434,21 @@ async function loadOrders({ recoverCryptoPayments = true } = {}) {
         : order.paymentMethod === "crypto" ? "ETH qua MetaMask" : "Thanh toán khi nhận hàng";
       status.textContent = `Đơn: ${orderLabels[order.orderStatus] || order.orderStatus} · ${methodLabel} · ${paymentLabels[order.paymentStatus] || "chưa cập nhật"}`;
       card.append(title, status);
+      if (order.statusHistory?.length) {
+        const history = document.createElement("section");
+        history.className = "customer-order-history";
+        const heading = document.createElement("strong");
+        heading.textContent = "Lịch sử trạng thái";
+        const steps = document.createElement("ol");
+        for (const entry of order.statusHistory) {
+          const step = document.createElement("li");
+          step.classList.toggle("is-current", entry.status === order.orderStatus);
+          step.textContent = orderLabels[entry.status] || entry.status;
+          steps.append(step);
+        }
+        history.append(heading, steps);
+        card.append(history);
+      }
       if (order.paymentMethod === "crypto" && order.cryptoAmountWei && window.ethers) {
         const quote = document.createElement("small");
         quote.className = "order-action-note";

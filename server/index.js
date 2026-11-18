@@ -4,8 +4,8 @@ import express from "express";
 import { rateLimit } from "express-rate-limit";
 import session from "express-session";
 import helmet from "helmet";
-import { randomBytes } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { FetchRequest, Interface, JsonRpcProvider, keccak256, toUtf8Bytes } from "ethers";
 import { chainId, rpcUrl } from "../local-network.js";
@@ -568,7 +568,8 @@ app.get("/api/orders", requireUser, async (request, response) => {
        FROM don_hang o LEFT JOIN thanh_toan_eth cp ON cp.ma_don_hang = o.ma
        WHERE o.ma_nguoi_dung = ? ORDER BY o.tao_luc DESC LIMIT 50`, [request.session.user.id],
     );
-    response.json({ orders: await attachOrderItems(orders) });
+    const ordersWithItems = await attachOrderItems(orders);
+    response.json({ orders: await attachOrderStatusHistory(ordersWithItems) });
   } catch {
     response.status(503).json({ error: "Chưa đọc được lịch sử đơn hàng." });
   }
@@ -589,6 +590,36 @@ async function attachOrderItems(orders) {
     byOrder.get(key).push(item);
   }
   return orders.map((order) => ({ ...order, items: byOrder.get(String(order.id)) ?? [] }));
+}
+
+async function attachOrderStatusHistory(orders) {
+  if (!orders.length) return [];
+  const ids = orders.map((order) => order.id);
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await pool.execute(
+    `SELECT ma_don_hang AS orderId, trang_thai_don AS statusCode, ma_giao_dich AS txHash
+     FROM tac_vu_blockchain
+     WHERE ma_don_hang IN (${placeholders})
+     ORDER BY ma_don_hang, trang_thai_don`, ids,
+  );
+  const statuses = Object.entries(orderStatusCode);
+  const byOrder = new Map();
+  for (const row of rows) {
+    const status = statuses.find(([, code]) => code === Number(row.statusCode))?.[0];
+    if (!status) continue;
+    const key = String(row.orderId);
+    if (!byOrder.has(key)) byOrder.set(key, []);
+    byOrder.get(key).push({ status, statusCode: Number(row.statusCode), txHash: row.txHash, recorded: Boolean(row.txHash) });
+  }
+  return orders.map((order) => {
+    const history = byOrder.get(String(order.id)) ?? [];
+    const currentStatus = statuses.find(([status]) => status === order.orderStatus);
+    if (currentStatus && !history.some((entry) => entry.status === order.orderStatus)) {
+      history.push({ status: currentStatus[0], statusCode: currentStatus[1], txHash: null, recorded: false });
+      history.sort((left, right) => left.statusCode - right.statusCode);
+    }
+    return { ...order, statusHistory: history };
+  });
 }
 
 function registryReceiptMatches(receipt, deployment, iface, order, status) {
@@ -690,7 +721,11 @@ app.get("/api/admin/orders", requireUser, requireAdmin, async (_request, respons
     );
     for (const order of orders) order.nextOrderStatuses = [...orderTransitions[order.orderStatus]];
     await checkStoredOrderProofs(orders);
-    response.json({ orders: await attachOrderItems(orders), blockchainAutomation: getBlockchainAutomationStatus() });
+    const ordersWithItems = await attachOrderItems(orders);
+    response.json({
+      orders: await attachOrderStatusHistory(ordersWithItems),
+      blockchainAutomation: getBlockchainAutomationStatus(),
+    });
   } catch {
     response.status(503).json({ error: "Chưa đọc được đơn hàng từ MySQL." });
   }
@@ -1067,23 +1102,63 @@ app.get("/api/admin/products", requireUser, requireAdmin, async (_request, respo
   }
 });
 
+app.post("/api/admin/product-images", requireUser, requireAdmin,
+  express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }),
+  async (request, response) => {
+    const image = request.body;
+    if (!Buffer.isBuffer(image) || image.length === 0) {
+      return response.status(400).json({ error: "Vui lòng chọn một ảnh JPG, PNG hoặc WebP." });
+    }
+
+    let extension;
+    let mimeType;
+    if (image.length >= 3 && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff) {
+      extension = "jpg";
+      mimeType = "image/jpeg";
+    } else if (image.length >= 8 && image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+      extension = "png";
+      mimeType = "image/png";
+    } else if (image.length >= 12 && image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP") {
+      extension = "webp";
+      mimeType = "image/webp";
+    } else {
+      return response.status(415).json({ error: "Tệp đã chọn không phải ảnh JPG, PNG hoặc WebP hợp lệ." });
+    }
+
+    if (request.headers["content-type"] !== mimeType) {
+      return response.status(415).json({ error: "Định dạng ảnh không khớp với nội dung tệp." });
+    }
+
+    const filename = `${randomUUID()}.${extension}`;
+    const uploadsDirectory = new URL("../public/uploads/products/", import.meta.url);
+    try {
+      await mkdir(uploadsDirectory, { recursive: true });
+      await writeFile(new URL(filename, uploadsDirectory), image, { flag: "wx", mode: 0o644 });
+      response.status(201).json({ imageUrl: `/uploads/products/${filename}` });
+    } catch {
+      response.status(500).json({ error: "Chưa lưu được ảnh sản phẩm vào máy chủ." });
+    }
+  },
+);
+
 function productInput(body) {
   const name = cleanText(body?.name, 180);
   const categoryId = Number(body?.categoryId);
   const priceVnd = Number(body?.priceVnd);
   const compareAtVnd = body?.compareAtVnd === "" || body?.compareAtVnd == null ? null : Number(body.compareAtVnd);
-  const stock = Number(body?.stock);
   const shortDescription = cleanText(body?.shortDescription, 500);
   const imageUrl = cleanText(body?.imageUrl, 500) || "/assets/watch-placeholder.svg";
+  const validImageUrl = /^\/(?:assets|uploads\/products)\/[a-z\d._/-]+$/i.test(imageUrl)
+    && !imageUrl.includes("..");
   const specificationsText = typeof body?.specifications === "string" ? body.specifications : JSON.stringify(body?.specifications ?? {});
   let specifications;
   try { specifications = JSON.parse(specificationsText); } catch { return { error: "Thông số phải là JSON hợp lệ." }; }
   if (!name || !Number.isSafeInteger(categoryId) || categoryId < 1 || !Number.isSafeInteger(priceVnd) || priceVnd < 1
-      || !Number.isSafeInteger(stock) || stock < 0 || (compareAtVnd != null && (!Number.isSafeInteger(compareAtVnd) || compareAtVnd < priceVnd))
-      || !imageUrl.startsWith("/assets/") || !specifications || Array.isArray(specifications) || typeof specifications !== "object") {
-    return { error: "Kiểm tra tên, danh mục, giá, kho, ảnh (đường dẫn /assets/) và thông số sản phẩm." };
+      || (compareAtVnd != null && (!Number.isSafeInteger(compareAtVnd) || compareAtVnd < priceVnd))
+      || !validImageUrl || !specifications || Array.isArray(specifications) || typeof specifications !== "object") {
+    return { error: "Kiểm tra tên, danh mục, giá, ảnh đã chọn và thông số sản phẩm." };
   }
-  return { name, slug: productSlug(name), categoryId, priceVnd, compareAtVnd, stock, shortDescription, imageUrl, specifications: JSON.stringify(specifications) };
+  return { name, slug: productSlug(name), categoryId, priceVnd, compareAtVnd, shortDescription, imageUrl, specifications: JSON.stringify(specifications) };
 }
 
 app.post("/api/admin/products", requireUser, requireAdmin, async (request, response) => {
@@ -1091,13 +1166,30 @@ app.post("/api/admin/products", requireUser, requireAdmin, async (request, respo
   if (data.error) return response.status(400).json({ error: data.error });
   try {
     const [result] = await pool.execute(
-      `INSERT INTO san_pham (ma_danh_muc, ten, ten_duong_dan, mo_ta_ngan, thong_so, gia_vnd, gia_niem_yet_vnd, ton_kho, duong_dan_anh)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.stock, data.imageUrl],
+      `INSERT INTO san_pham (ma_danh_muc, ten, ten_duong_dan, mo_ta_ngan, thong_so, gia_vnd, gia_niem_yet_vnd, duong_dan_anh)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.imageUrl],
     );
     response.status(201).json({ id: result.insertId });
   } catch (error) {
     response.status(error.code === "ER_DUP_ENTRY" ? 409 : 400).json({ error: error.code === "ER_DUP_ENTRY" ? "Tên sản phẩm đã tồn tại." : "Chưa lưu được sản phẩm; kiểm tra danh mục." });
+  }
+});
+
+app.patch("/api/admin/products/:id/stock", requireUser, requireAdmin, async (request, response) => {
+  const id = Number(request.params.id);
+  const stock = Number(request.body?.stock);
+  if (!Number.isSafeInteger(id) || id < 1) return response.status(400).json({ error: "Mã sản phẩm không hợp lệ." });
+  if (!Number.isSafeInteger(stock) || stock < 0 || stock > 4294967295) {
+    return response.status(400).json({ error: "Số lượng tồn kho phải là số nguyên từ 0 đến 4.294.967.295." });
+  }
+  try {
+    const [existing] = await pool.execute("SELECT ma FROM san_pham WHERE ma = ? LIMIT 1", [id]);
+    if (!existing.length) return response.status(404).json({ error: "Không tìm thấy sản phẩm." });
+    await pool.execute("UPDATE san_pham SET ton_kho = ? WHERE ma = ?", [stock, id]);
+    response.json({ ok: true, stock });
+  } catch {
+    response.status(503).json({ error: "Chưa cập nhật được số lượng tồn kho." });
   }
 });
 
@@ -1117,8 +1209,8 @@ app.patch("/api/admin/products/:id", requireUser, requireAdmin, async (request, 
   try {
     const [result] = await pool.execute(
       `UPDATE san_pham SET ma_danh_muc = ?, ten = ?, ten_duong_dan = ?, mo_ta_ngan = ?, thong_so = ?,
-       gia_vnd = ?, gia_niem_yet_vnd = ?, ton_kho = ?, duong_dan_anh = ? WHERE ma = ?`,
-      [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.stock, data.imageUrl, id],
+       gia_vnd = ?, gia_niem_yet_vnd = ?, duong_dan_anh = ? WHERE ma = ?`,
+      [data.categoryId, data.name, data.slug, data.shortDescription, data.specifications, data.priceVnd, data.compareAtVnd, data.imageUrl, id],
     );
     response.json({ ok: Boolean(result.affectedRows) });
   } catch (error) {
@@ -1132,6 +1224,7 @@ app.use("/vendor/sweetalert2", express.static(fileURLToPath(new URL("../node_mod
 app.use(express.static(fileURLToPath(new URL("../public/", import.meta.url)), { extensions: ["html"] }));
 app.use((_request, response) => response.status(404).sendFile(fileURLToPath(new URL("../public/404.html", import.meta.url))));
 app.use((error, _request, response, _next) => {
+  if (error.type === "entity.too.large") return response.status(413).json({ error: "Ảnh sản phẩm không được vượt quá 5 MB." });
   console.error("Request failed:", error.message);
   if (!response.headersSent) response.status(500).json({ error: "Có lỗi nội bộ. Hãy thử lại." });
 });

@@ -9,6 +9,7 @@ const orderStates = [
 ];
 let categories = [];
 let users = [];
+let productImagePreviewUrl = "";
 let ordersRevision = 0;
 let proofRefreshTimer;
 
@@ -20,6 +21,19 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Yêu cầu chưa hoàn tất.");
   return data;
+}
+
+async function uploadProductImage(file) {
+  const response = await fetch("/api/admin/product-images", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Chưa tải được ảnh sản phẩm.");
+  return data.imageUrl;
 }
 
 function announce(message, error = false) {
@@ -407,6 +421,33 @@ function renderOrderProof(order) {
     : syncMessages[order.blockchainSync] ?? proofMessages[order.blockchainProof]
       ?? "Trạng thái đơn hiện tại chưa có bằng chứng blockchain.";
   proof.append(proofText);
+  if (order.statusHistory?.length) {
+    const history = document.createElement("section");
+    history.className = "admin-order-history";
+    const heading = document.createElement("strong");
+    heading.textContent = "Lịch sử trạng thái";
+    const steps = document.createElement("ol");
+    for (const entry of order.statusHistory) {
+      const step = document.createElement("li");
+      const label = orderStates.find(([code]) => code === entry.status)?.[1] || entry.status;
+      step.append(document.createTextNode(label));
+      if (entry.txHash) {
+        step.append(document.createTextNode(" · "));
+        const link = document.createElement("a");
+        link.href = `/transaction.html?${new URLSearchParams({ hash: entry.txHash })}`;
+        link.textContent = "Xem giao dịch";
+        link.title = entry.txHash;
+        step.append(link);
+      } else {
+        const pending = document.createElement("small");
+        pending.textContent = " · Đang chờ ghi nhận";
+        step.append(pending);
+      }
+      steps.append(step);
+    }
+    history.append(heading, steps);
+    proof.append(history);
+  }
   if (order.blockchainDigest) {
     const digest = document.createElement("small");
     digest.textContent = `Mã băm đơn: ${order.blockchainDigest}`;
@@ -525,13 +566,19 @@ function populateCategoryForm(category) {
 
 function populateProductForm(product) {
   const form = $("#product-form");
+  if (productImagePreviewUrl) URL.revokeObjectURL(productImagePreviewUrl);
+  productImagePreviewUrl = "";
   form.elements.id.value = product?.id ?? "";
   form.elements.name.value = product?.name ?? "";
   form.elements.categoryId.value = String(product?.categoryId ?? categories[0]?.id ?? "");
   form.elements.priceVnd.value = product?.priceVnd ?? "";
   form.elements.compareAtVnd.value = product?.compareAtVnd ?? "";
-  form.elements.stock.value = product?.stock ?? "";
-  form.elements.imageUrl.value = product?.imageUrl ?? "/assets/watch-placeholder.svg";
+  form.elements.imageFile.value = "";
+  form.elements.imageFile.required = !product;
+  form.dataset.imageUrl = product?.imageUrl ?? "/assets/watch-placeholder.svg";
+  const imagePreview = $("#product-image-preview");
+  imagePreview.src = form.dataset.imageUrl;
+  imagePreview.alt = product ? `Ảnh sản phẩm ${product.name}` : "Ảnh xem trước sản phẩm";
   form.elements.shortDescription.value = product?.shortDescription ?? "";
   form.elements.specifications.value = formatSpecifications(
     product?.specifications ?? { "Màn hình": "AMOLED", "Định vị": "GNSS tích hợp" },
@@ -589,6 +636,113 @@ async function loadProducts() {
   }
 }
 
+async function loadInventory() {
+  const target = $("#admin-inventory");
+  target.replaceChildren();
+  try {
+    const { products } = await api("/api/admin/products");
+    const totalUnits = products.reduce((total, product) => total + Number(product.stock || 0), 0);
+    const lowStock = products.filter((product) => Number(product.stock) > 0 && Number(product.stock) <= 5).length;
+    const outOfStock = products.filter((product) => Number(product.stock) <= 0).length;
+    $("#inventory-total-units").textContent = new Intl.NumberFormat("vi-VN").format(totalUnits);
+    $("#inventory-low-stock").textContent = String(lowStock);
+    $("#inventory-out-of-stock").textContent = String(outOfStock);
+
+    if (!products.length) {
+      const row = document.createElement("tr");
+      row.className = "table-empty-row";
+      const cell = document.createElement("td");
+      cell.colSpan = 4;
+      cell.textContent = "Chưa có sản phẩm để quản lý tồn kho.";
+      row.append(cell);
+      target.append(row);
+      return;
+    }
+
+    for (const product of products) {
+      const stock = Number(product.stock || 0);
+      const row = document.createElement("tr");
+      const productCell = document.createElement("td");
+      const identity = document.createElement("div");
+      identity.className = "inventory-product";
+      const image = document.createElement("img");
+      image.src = product.imageUrl || "/assets/watch-placeholder.svg";
+      image.alt = "";
+      image.loading = "lazy";
+      image.addEventListener("error", () => { image.src = "/assets/watch-placeholder.svg"; }, { once: true });
+      const details = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = product.name;
+      const category = document.createElement("small");
+      category.textContent = categories.find((item) => Number(item.id) === Number(product.categoryId))?.name || "Chưa phân loại";
+      details.append(name, category);
+      identity.append(image, details);
+      productCell.append(identity);
+
+      const statusCell = document.createElement("td");
+      const status = document.createElement("span");
+      status.className = `inventory-status${stock === 0 ? " empty" : stock <= 5 ? " low" : ""}`;
+      status.textContent = stock === 0 ? "Hết hàng" : stock <= 5 ? "Sắp hết" : "Còn hàng";
+      statusCell.append(status);
+
+      const currentCell = document.createElement("td");
+      currentCell.textContent = `${new Intl.NumberFormat("vi-VN").format(stock)} sản phẩm`;
+
+      const actionCell = document.createElement("td");
+      const editor = document.createElement("div");
+      editor.className = "inventory-stock-editor";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "0";
+      input.max = "4294967295";
+      input.step = "1";
+      input.value = String(stock);
+      input.setAttribute("aria-label", `Số lượng tồn kho mới của ${product.name}`);
+      const update = document.createElement("button");
+      update.type = "button";
+      update.textContent = "Lưu tồn kho";
+      update.addEventListener("click", async () => {
+        const nextStock = Number(input.value);
+        if (!Number.isSafeInteger(nextStock) || nextStock < 0 || nextStock > 4294967295) {
+          showToast({ title: "Số lượng tồn kho không hợp lệ.", icon: "warning" });
+          input.focus();
+          return;
+        }
+        update.disabled = true;
+        input.disabled = true;
+        try {
+          await api(`/api/admin/products/${product.id}/stock`, {
+            method: "PATCH",
+            body: JSON.stringify({ stock: nextStock }),
+          });
+          showToast({
+            title: "Đã cập nhật tồn kho.",
+            text: `${product.name}: ${new Intl.NumberFormat("vi-VN").format(nextStock)} sản phẩm.`,
+          });
+          await Promise.all([loadInventory(), loadProducts()]);
+        } catch (error) {
+          showToast({ title: vietnameseError(error, "Chưa cập nhật được tồn kho."), icon: "error", timer: 5200 });
+        } finally {
+          update.disabled = false;
+          input.disabled = false;
+        }
+      });
+      editor.append(input, update);
+      actionCell.append(editor);
+      row.append(productCell, statusCell, currentCell, actionCell);
+      target.append(row);
+    }
+  } catch (error) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.className = "table-empty-row";
+    cell.textContent = vietnameseError(error, "Chưa tải được dữ liệu kho hàng.");
+    row.append(cell);
+    target.append(row);
+  }
+}
+
 async function initialize() {
   try {
     const { user } = await api("/api/auth/me");
@@ -614,12 +768,14 @@ document.querySelectorAll("[data-panel]").forEach((button) => {
     document.querySelectorAll(".admin-panel").forEach((panel) => {
       panel.hidden = panel.id !== `${button.dataset.panel}-panel`;
     });
+    if (button.dataset.panel === "inventory") loadInventory();
   });
 });
 
 $("#orders-reload").addEventListener("click", loadOrders);
 $("#users-reload").addEventListener("click", loadUsers);
 $("#products-reload").addEventListener("click", loadProducts);
+$("#inventory-reload").addEventListener("click", loadInventory);
 $("#users-search").addEventListener("input", renderUsers);
 $("#user-dialog-close").addEventListener("click", () => $("#user-dialog").close());
 $("#user-cancel").addEventListener("click", () => $("#user-dialog").close());
@@ -655,6 +811,24 @@ $("#admin-logout").addEventListener("click", async () => {
 });
 $("#product-reset").addEventListener("click", () => populateProductForm(null));
 $("#category-reset").addEventListener("click", () => populateCategoryForm(null));
+$("#product-image-file").addEventListener("change", (event) => {
+  const input = event.currentTarget;
+  const file = input.files?.[0];
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    input.value = "";
+    showToast({ title: "Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.", icon: "warning" });
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    input.value = "";
+    showToast({ title: "Ảnh vượt quá giới hạn 5 MB.", icon: "warning" });
+    return;
+  }
+  if (productImagePreviewUrl) URL.revokeObjectURL(productImagePreviewUrl);
+  productImagePreviewUrl = URL.createObjectURL(file);
+  $("#product-image-preview").src = productImagePreviewUrl;
+});
 $("#category-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -673,22 +847,36 @@ $("#product-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const id = form.elements.id.value;
+  const imageFile = form.elements.imageFile.files?.[0];
   const body = Object.fromEntries(new FormData(form).entries());
   delete body.id;
+  delete body.imageFile;
+  if (!imageFile && !id) {
+    $("#product-message").textContent = "Vui lòng chọn ảnh sản phẩm từ máy tính.";
+    form.elements.imageFile.focus();
+    return;
+  }
   try {
     body.specifications = parseSpecifications(body.specifications);
   } catch (error) {
     $("#product-message").textContent = error.message;
     return;
   }
+  const submitButton = form.querySelector('[type="submit"]');
+  submitButton.disabled = true;
   try {
+    body.imageUrl = imageFile ? await uploadProductImage(imageFile) : form.dataset.imageUrl;
     const result = await api(id ? `/api/admin/products/${id}` : "/api/admin/products", {
       method: id ? "PATCH" : "POST", body: JSON.stringify(body),
     });
     $("#product-message").textContent = id ? "Đã cập nhật sản phẩm." : `Đã thêm sản phẩm #${result.id}.`;
     populateProductForm(null);
     await loadProducts();
-  } catch (error) { $("#product-message").textContent = vietnameseError(error, "Chưa lưu được sản phẩm."); }
+  } catch (error) {
+    $("#product-message").textContent = vietnameseError(error, "Chưa lưu được sản phẩm.");
+  } finally {
+    submitButton.disabled = false;
+  }
 });
 
 initialize();

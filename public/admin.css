@@ -38,6 +38,10 @@
 .order-proof { margin-top: 12px; padding: 12px; background: #f3f8f5; border: 1px dashed #cddbd2; border-radius: 9px; overflow-wrap: anywhere; }
 .order-proof small { display: block; color: var(--admin-muted); margin-top: 5px; }
 .order-proof a { color: var(--admin-link); font-size: 12px; }
+.admin-order-history { margin-top: 10px; padding-top: 9px; border-top: 1px solid #dce7df; }
+.admin-order-history>strong { display: block; margin-bottom: 4px; }
+.admin-order-history ol { margin: 0; padding-left: 20px; color: var(--admin-muted); line-height: 1.8; }
+.admin-order-history small { color: var(--admin-muted); }
 .blockchain-lookup { text-decoration: underline; text-underline-offset: 2px; }
 .blockchain-panel .blockchain-lookup { display: inline-block; margin-top: 9px; color: var(--admin-link); font-size: 12px; font-weight: 650; }
 .order-cancellation-request { display: grid; gap: 6px; margin-top: 14px; padding: 13px; border: 1px solid #ead9bb; border-radius: 9px; background: #fffaf1; color: #594629; }
@@ -160,6 +164,35 @@
   background: #edf1ed;
   color: var(--admin-muted);
   cursor: not-allowed;
+}
+.image-picker > label { display: block; margin-bottom: 7px; color: #39443f; font-size: 11px; font-weight: 600; }
+.image-picker-control { display: flex; align-items: center; gap: 16px; padding: 13px; border: 1px dashed #aebeb2; border-radius: 9px; background: #fbfcfb; }
+.image-picker-control img { width: 82px; height: 82px; flex: 0 0 82px; border: 1px solid #dce5de; border-radius: 8px; background: #f1f4f1; object-fit: cover; }
+.image-picker-control > div { display: grid; gap: 7px; min-width: 0; }
+.image-picker-control input[type="file"] { width: 100%; box-sizing: border-box; color: #26322b; font-size: 12px; }
+.image-picker-control .form-hint { color: var(--admin-muted); font-size: 11px; line-height: 1.5; }
+.inventory-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 0 0 18px; }
+.inventory-metrics article { display: grid; gap: 5px; min-height: 95px; padding: 15px; border: 1px solid #e3e9e4; border-radius: 9px; background: #f8faf8; }
+.inventory-metrics article span { color: var(--admin-muted); font-size: 11px; font-weight: 650; }
+.inventory-metrics article strong { color: #26322b; font-size: 25px; letter-spacing: -.04em; }
+.inventory-metrics article small { color: var(--admin-muted); font-size: 10px; }
+.inventory-table { min-width: 760px; }
+.inventory-product { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+.inventory-product img { width: 46px; height: 46px; flex: 0 0 46px; border: 1px solid #e3e9e4; border-radius: 7px; background: #f4f6f4; object-fit: cover; }
+.inventory-product strong,.inventory-product small { display: block; }
+.inventory-product strong { color: #26322b; font-size: 11px; }
+.inventory-product small { margin-top: 4px; color: var(--admin-muted); font-size: 10px; }
+.inventory-status { display: inline-flex; padding: 5px 8px; border-radius: 999px; background: #e8f3ec; color: #176451; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.inventory-status.low { background: #fff4df; color: #805510; }
+.inventory-status.empty { background: #fdecea; color: #a13b30; }
+.inventory-stock-editor { display: flex; align-items: center; gap: 7px; min-width: 190px; }
+.inventory-stock-editor input { width: 92px; min-height: 36px; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--admin-control-border); border-radius: 7px; color: #26322b; font: inherit; font-size: 11px; }
+.inventory-stock-editor button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--admin-control-border); border-radius: 7px; background: #fff; color: var(--admin-link); font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.inventory-stock-editor button:hover { border-color: var(--admin-link); background: #f2f8f3; }
+@media (max-width: 620px) {
+  .inventory-metrics { grid-template-columns: 1fr; gap: 8px; }
+  .inventory-metrics article { min-height: 76px; }
+  .image-picker-control { align-items: flex-start; flex-direction: column; }
 }
 @media (max-width: 920px) {
   .admin-main { width: min(100% - 36px, 760px); }

@@ -1,6 +1,10 @@
 # MiTime Watch Store
 
-MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thông minh Xiaomi và Redmi, gồm cửa hàng cho khách hàng và bảng điều khiển quản trị. MySQL quản lý tài khoản, danh mục, sản phẩm, tồn kho và đơn hàng. Hợp đồng Solidity lưu bằng chứng đơn hàng và giữ ETH thử nghiệm trong escrow; thông tin cá nhân được giữ trong MySQL. Thanh toán hỗ trợ COD, VNPay Sandbox và ETH trên Hardhat Local.
+**MiTime là cửa hàng trực tuyến dành cho đồng hồ thông minh Xiaomi và Redmi, kết hợp ứng dụng web, cơ sở dữ liệu MySQL và hợp đồng thông minh Solidity.**
+
+Dự án tập trung ứng dụng blockchain vào quy trình đơn hàng: khách hàng có thể thanh toán bằng ETH qua MetaMask; hợp đồng escrow giữ ETH trong thời gian xử lý, sau đó giải ngân cho cửa hàng khi đơn được giao hoặc hoàn lại cho khách khi đơn bị hủy hợp lệ. Các mốc trạng thái đơn được ghi nhận trên blockchain và có thể tra cứu theo mã giao dịch.
+
+Thông tin tài khoản, sản phẩm, người nhận và chi tiết đơn hàng được lưu trong MySQL để cửa hàng vận hành. Blockchain lưu bằng chứng mã hóa của đơn, trạng thái đã ghi nhận và các giao dịch ETH; dữ liệu cá nhân không được đưa lên blockchain. Bên cạnh ETH thử nghiệm trên Hardhat Local, cửa hàng hỗ trợ thanh toán khi nhận hàng (COD) và VNPay Sandbox.
 
 ## Tính năng
 
@@ -16,6 +20,7 @@ MiTime là ứng dụng thương mại điện tử dành cho đồng hồ thôn
 - SweetAlert2 hiển thị hộp thoại xác nhận và thông báo trạng thái cho các thao tác quan trọng.
 - Quản trị viên quản lý khách hàng, danh mục, sản phẩm, tồn kho, trạng thái đơn và thanh toán COD.
 - Máy chủ tự ghi mã băm và trạng thái đơn lên blockchain. Các bản ghi chờ sẽ được gửi lại khi Hardhat sẵn sàng.
+- Lịch sử trạng thái đơn được hiển thị theo thứ tự; trang quản trị có liên kết tra cứu giao dịch tương ứng.
 - Máy chủ kiểm tra giá và tồn kho trước khi tạo đơn; hệ thống không lưu thông tin thẻ.
 - Giao diện và thông báo lỗi bằng tiếng Việt.
 
@@ -74,10 +79,6 @@ Blockchain dùng Hardhat Network chạy trên máy cục bộ, không phải Eth
 Chọn **Tra cứu mã giao dịch** trong trang quản trị hoặc mở mã giao dịch trên một đơn để xem chi tiết trực tiếp từ Hardhat. Trang cho biết số ETH thực chuyển, địa chỉ gửi và nhận tiền, block và phí gas.
 
 Giữ cửa sổ Hardhat mở trong khi trình diễn. Khóa ví tự động và khóa ký báo giá được `setup` tạo trong `.env`. Ví tự động chỉ hoạt động trên Hardhat cục bộ. Khi nâng cấp hợp đồng đang giữ ETH, hãy xử lý xong các đơn đó trên hợp đồng cũ trước khi triển khai lại. Hợp đồng chỉ lưu mã băm đơn hàng/hóa đơn, ví thanh toán, số ETH thử nghiệm và trạng thái escrow. Tên, địa chỉ và số điện thoại khách hàng được giữ trong MySQL.
-
-## Chia việc cho hai thành viên
-
-Xem [docs/PHAN_CHIA_CONG_VIEC.md](docs/PHAN_CHIA_CONG_VIEC.md) để biết phạm vi tệp, giao ước API/hợp đồng và cách phối hợp qua nhánh GitHub.
 
 ## Thanh toán VNPay
 
